@@ -1,0 +1,3 @@
+-- Product fixtures will be inserted through authenticated API flows once the
+-- local Auth integration is implemented. Keep this file so `db reset` remains
+-- deterministic without creating users that bypass Supabase Auth.

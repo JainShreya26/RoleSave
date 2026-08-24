@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Manager PDF Capture Spike",
+  "description": "Captures the active job page and downloads a PDF through the local converter.",
+  "version": "0.2.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "pageCapture"],
+  "host_permissions": ["http://127.0.0.1:4318/*"],
+  "action": {
+    "default_title": "Capture job page",
+    "default_popup": "popup.html"
+  }
+}

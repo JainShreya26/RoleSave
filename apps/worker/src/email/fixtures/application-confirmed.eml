@@ -1,0 +1,10 @@
+From: Acme Recruiting <notifications@acme.greenhouse.io>
+To: jobs+token@inbound.example.com
+Subject: Thank you for applying to Acme
+Date: Sun, 23 Aug 2026 14:00:00 -0400
+Message-ID: <confirmation-123@acme.greenhouse.io>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+We received your application for Senior Software Engineer.
+Requisition ID: ENG-4821

@@ -1,0 +1,9 @@
+From: Acme Talent <talent@acme.example>
+To: candidate@example.com
+Subject: Technical assessment for your application
+Date: Sun, 23 Aug 2026 15:00:00 -0400
+Message-ID: <assessment-123@acme.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><style>.hidden{display:none}</style><p>Please complete the technical assessment by Friday.</p><script>ignoreMe()</script></body></html>

@@ -1,0 +1,27 @@
+{
+  "name": "manager",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "pnpm --recursive --if-present run build",
+    "dev:extension": "pnpm --filter @manager/extension dev",
+    "dev:web": "pnpm --filter @manager/web dev",
+    "dev:worker": "pnpm --filter @manager/worker dev",
+    "email:flow": "pnpm --filter @manager/worker email-flow",
+    "email:process-once": "pnpm --filter @manager/worker start -- --once",
+    "lint": "pnpm --recursive --if-present run lint",
+    "spike:mhtml:convert": "node spikes/mhtml-capture/scripts/convert.mjs",
+    "spike:mhtml:serve": "node spikes/mhtml-capture/scripts/server.mjs",
+    "spike:mhtml:verify": "node spikes/mhtml-capture/scripts/verify.mjs",
+    "spike:mhtml:verify-server": "node spikes/mhtml-capture/scripts/verify-server.mjs",
+    "supabase:reset": "supabase db reset",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
+    "supabase:stop": "supabase stop",
+    "test": "pnpm --recursive --if-present run test",
+    "typecheck": "pnpm --recursive --if-present run typecheck"
+  },
+  "devDependencies": {
+    "supabase": "^2.115.0"
+  }
+}

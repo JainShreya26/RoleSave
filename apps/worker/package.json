@@ -1,0 +1,28 @@
+{
+  "name": "@manager/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "tsx watch --env-file-if-exists=../web/.env.local src/index.ts",
+    "email-flow": "tsx --env-file-if-exists=../web/.env.local scripts/run-email-flow.ts",
+    "start": "tsx --env-file-if-exists=../web/.env.local src/index.ts",
+    "test": "tsx --test src/index.test.ts src/email/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@manager/validation": "workspace:*",
+    "@supabase/supabase-js": "^2.112.3",
+    "cheerio": "^1.2.0",
+    "mailparser": "^3.9.15",
+    "resend": "^6.22.0"
+  },
+  "devDependencies": {
+    "@manager/config": "workspace:*",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^24",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

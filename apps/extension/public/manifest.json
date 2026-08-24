@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Ledger Application Tracker",
+  "description": "Save job descriptions to the private Ledger dashboard.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "pageCapture", "scripting", "storage"],
+  "host_permissions": [
+    "https://*.supabase.co/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*"
+  ],
+  "action": { "default_title": "Save job to Ledger", "default_popup": "index.html" }
+}

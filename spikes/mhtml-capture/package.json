@@ -1,0 +1,14 @@
+{
+  "name": "@manager/mhtml-capture-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "convert": "node scripts/convert.mjs",
+    "serve": "node scripts/server.mjs",
+    "verify": "node scripts/verify.mjs",
+    "verify:server": "node scripts/verify-server.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.55.0"
+  }
+}

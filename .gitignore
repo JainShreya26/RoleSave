@@ -1,0 +1,19 @@
+node_modules/
+.pnpm-store/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+supabase/.temp/
+
+# MHTML/PDF spike output can contain private job-page data.
+spikes/mhtml-capture/captures/*
+!spikes/mhtml-capture/captures/.gitkeep
+spikes/mhtml-capture/output/*
+!spikes/mhtml-capture/output/.gitkeep
+
+.DS_Store

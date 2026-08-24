@@ -1,0 +1,52 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: https://jobs.example.test/systems-engineer
+Subject: Systems Engineer - Example Labs
+Date: Sat, 22 Aug 2026 14:10:00 -0400
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--manager-spike-01"
+
+
+------MultipartBoundary--manager-spike-01
+Content-Type: text/html
+Content-ID: <frame-001@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://jobs.example.test/systems-engineer
+
+<!doctype html>
+<html lang=3D"en">
+<head>
+  <meta charset=3D"utf-8">
+  <title>Systems Engineer - Example Labs</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #172033; margin: 0; }
+    header { background: #172033; color: white; padding: 44px; }
+    main { max-width: 760px; margin: 0 auto; padding: 42px; line-height: 1.55; }
+    h1 { margin: 0 0 8px; font-size: 34px; }
+    .meta { color: #dce3f2; }
+    h2 { margin-top: 32px; }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Systems Engineer</h1>
+    <div class=3D"meta">Example Labs =C2=B7 Detroit, MI =C2=B7 Full time</div>
+  </header>
+  <main>
+    <h2>About the role</h2>
+    <p>Build reliable services that help candidates keep track of their job applications.</p>
+    <h2>What you will do</h2>
+    <ul>
+      <li>Design durable TypeScript services.</li>
+      <li>Operate PostgreSQL and background job infrastructure.</li>
+      <li>Make privacy-conscious product decisions.</li>
+    </ul>
+    <h2>What we are looking for</h2>
+    <p>Experience building dependable web products and a fondness for clear interfaces.</p>
+  </main>
+</body>
+</html>
+
+------MultipartBoundary--manager-spike-01--

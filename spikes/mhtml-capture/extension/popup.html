@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Capture job page</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Application Tracker</p>
+      <h1>Capture job page</h1>
+
+      <label>
+        Company
+        <input id="company" name="company" autocomplete="organization" />
+      </label>
+
+      <label>
+        Position
+        <input id="position" name="position" autocomplete="off" />
+      </label>
+
+      <dl>
+        <div>
+          <dt>Page</dt>
+          <dd id="page-title">Loading…</dd>
+        </div>
+        <div>
+          <dt>URL</dt>
+          <dd id="page-url">Loading…</dd>
+        </div>
+      </dl>
+
+      <button id="capture" type="button">Save job description PDF</button>
+      <p class="helper">Keep the local converter running until the PDF downloads.</p>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

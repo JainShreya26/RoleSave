@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(4);
+select plan(5);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -51,6 +51,16 @@ insert into public.email_events (
   '53000000-0000-4000-8000-000000000003',
   'email-status-message', 'Thank you for applying', now(),
   'APPLICATION_CONFIRMED', 0.95, 50, 'Thank you for applying'
+);
+
+select ok(
+  public.set_email_review_suggestions(
+    '55000000-0000-4000-8000-000000000005',
+    array['52000000-0000-4000-8000-000000000002'::uuid],
+    'Confirm the application match',
+    0.95
+  ),
+  'review task opens for the confirmation email'
 );
 
 set local role authenticated;

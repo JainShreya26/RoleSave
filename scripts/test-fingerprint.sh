@@ -19,9 +19,9 @@ MIGRATIONS=(
   "$ROOT/supabase/migrations/20260825144000_application_deduplication.sql"
 )
 TESTS=(
-  "$ROOT/supabase/tests/database/fingerprint.test.sql"
-  "$ROOT/supabase/tests/database/match-candidates.test.sql"
-  "$ROOT/supabase/tests/database/application-deduplication.test.sql"
+  "$ROOT/supabase/tests/local/fingerprint.test.sql"
+  "$ROOT/supabase/tests/local/match-candidates.test.sql"
+  "$ROOT/supabase/tests/local/application-deduplication.test.sql"
 )
 
 if ! command -v psql >/dev/null 2>&1; then

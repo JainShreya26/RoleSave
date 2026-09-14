@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(23);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -124,10 +124,18 @@ select is(
   'user A cannot reassign an email to user B application'
 );
 select ok(
-  public.undo_email_event_match('11700000-0000-4000-8000-000000000001')
-    and (select application_id is null from public.email_events where id = '11700000-0000-4000-8000-000000000001')
-    and (select status = 'OPEN' from public.review_tasks where email_event_id = '11700000-0000-4000-8000-000000000001'),
-  'undo detaches the email and reopens review'
+  public.undo_email_event_match('11700000-0000-4000-8000-000000000001'),
+  'user A can undo their email match'
+);
+select is(
+  (select application_id from public.email_events where id = '11700000-0000-4000-8000-000000000001'),
+  null::uuid,
+  'undo detaches the email'
+);
+select is(
+  (select status::text from public.review_tasks where email_event_id = '11700000-0000-4000-8000-000000000001'),
+  'OPEN',
+  'undo reopens review'
 );
 
 select set_config('request.jwt.claim.sub', '20000000-0000-4000-8000-000000000002', true);

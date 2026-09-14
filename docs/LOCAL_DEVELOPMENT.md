@@ -131,6 +131,8 @@ pnpm exec supabase test db
 
 The first command verifies cross-user database, storage, and replay isolation through
 the same Supabase APIs used by the application. The second runs the pgTAP RLS suite.
+`pnpm test:fingerprint` and `pnpm test:cleanup` run the standalone SQL regression
+suites against disposable local PostgreSQL databases.
 
 Stop the local stack without deleting its database with:
 

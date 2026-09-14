@@ -41,7 +41,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm supabase:start
-      - run: pnpm exec supabase test db
+      - run: pnpm exec supabase test db supabase/tests/database/authorization.test.sql supabase/tests/database/email-status.test.sql
       - run: pnpm exec supabase status -o env > .supabase-ci.env
       - name: Run cross-user API and storage tests
         shell: bash

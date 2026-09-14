@@ -14,7 +14,7 @@ set -euo pipefail
 DB="${CLEANUP_TEST_DB:-rolesave_cleanup_test}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATION="$ROOT/supabase/migrations/20260826010000_remove_orphaned_operational_objects.sql"
-TEST="$ROOT/supabase/tests/database/orphaned-objects.test.sql"
+TEST="$ROOT/supabase/tests/local/orphaned-objects.test.sql"
 
 if ! command -v psql >/dev/null 2>&1; then
   echo "psql was not found. Install PostgreSQL or add it to PATH." >&2

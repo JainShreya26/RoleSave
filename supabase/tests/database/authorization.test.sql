@@ -1,7 +1,24 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(27);
+
+select ok(
+  has_table_privilege('service_role', 'public.capture_jobs', 'INSERT'),
+  'service role can create capture jobs'
+);
+select ok(
+  has_table_privilege('service_role', 'public.inbound_email_jobs', 'INSERT'),
+  'service role can create inbound email jobs'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.capture_jobs', 'INSERT'),
+  'authenticated users cannot insert capture jobs directly'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.inbound_email_jobs', 'INSERT'),
+  'authenticated users cannot insert inbound email jobs directly'
+);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,

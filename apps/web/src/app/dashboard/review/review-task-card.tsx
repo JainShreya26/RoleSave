@@ -7,6 +7,20 @@ import { dismissReviewTaskAction, resolveReviewTaskAction, type ReviewActionStat
 
 const initialState: ReviewActionState = {};
 
+function applicationOptionLabel(application: ReviewApplicationOption, suggestionIndex: number) {
+  let host = "No original URL";
+  if (application.originalUrl) {
+    try {
+      host = new URL(application.originalUrl).hostname;
+    } catch {
+      host = "Invalid original URL";
+    }
+  }
+  const ranking = suggestionIndex >= 0 ? `Suggested ${suggestionIndex + 1}` : "Other application";
+  const relevantTime = application.appliedAt ?? application.createdAt;
+  return `${ranking}: ${application.company} — ${application.position} · ${titleCase(application.status)} · ${formatDateTime(relevantTime)} · ${host}`;
+}
+
 export function ReviewTaskCard({
   applications,
   task,
@@ -47,10 +61,14 @@ export function ReviewTaskCard({
           <form action={resolveAction} className="stack-form">
             <input name="taskId" type="hidden" value={task.id} />
             <label>Match to application
-              <select defaultValue={task.suggestedApplicationIds[0] ?? orderedApplications[0].id} name="applicationId">
+              <select defaultValue="" name="applicationId" required>
+                <option disabled value="">Choose the application you want to update…</option>
                 {orderedApplications.map((application) => (
                   <option key={application.id} value={application.id}>
-                    {application.company} — {application.position}
+                    {applicationOptionLabel(
+                      application,
+                      task.suggestedApplicationIds.indexOf(application.id),
+                    )}
                   </option>
                 ))}
               </select>

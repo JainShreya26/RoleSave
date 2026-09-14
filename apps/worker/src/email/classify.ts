@@ -17,13 +17,13 @@ const subjectSignals: Array<[RegExp, number]> = [
   [/\binterview\b/i, 30],
   [/\bassessment\b|\bcoding challenge\b|\bonline test\b/i, 30],
   [/\boffer\b/i, 30],
-  [/\bapplication\b|\bapplied\b/i, 20],
+  [/\bapplication\b|\bappl(?:y|ied|ies|ying)\b/i, 20],
   [/\brecruit(?:er|ing|ment)\b|\bcandidate\b/i, 20],
 ];
 
 const promotionalSubject = /\b(newsletter|job alert|jobs? for you|weekly digest|recommended jobs?|career tips)\b/i;
 
-export function scoreEmailMetadata(metadata: Pick<ParsedEmail, "hasUnsubscribe" | "senderDomain" | "subject">) {
+export function scoreEmailMetadata(metadata: Pick<ParsedEmail, "hasUnsubscribe" | "senderAddress" | "senderDomain" | "subject">) {
   let score = 0;
   if (metadata.senderDomain && knownAtsDomains.some((domain) =>
     metadata.senderDomain === domain || metadata.senderDomain?.endsWith(`.${domain}`)
@@ -32,6 +32,10 @@ export function scoreEmailMetadata(metadata: Pick<ParsedEmail, "hasUnsubscribe" 
   }
   for (const [pattern, points] of subjectSignals) {
     if (pattern.test(metadata.subject)) score += points;
+  }
+  const senderLocalPart = metadata.senderAddress?.split("@")[0] ?? "";
+  if (/\b(?:career|hiring|jobs?|recruit(?:er|ing|ment)?|talent)\b/i.test(senderLocalPart.replace(/[^a-z]+/gi, " "))) {
+    score += 15;
   }
   if (promotionalSubject.test(metadata.subject)) score -= 50;
   if (metadata.hasUnsubscribe) score -= 30;
@@ -117,6 +121,8 @@ function cleanEntity(value: string) {
 
 function extractCompany(value: string, senderName: string | null) {
   const bodyPatterns = [
+    /\b(?:applying|applied)\s+to\s+([^\n.!?]{2,200})/i,
+    /\b(?:interest|application)\s+(?:in|with)\s+([^\n.!?]{2,200})/i,
     /\b(?:position|role)\s+(?:at|with)\s+([^\n.!?]{2,200})/i,
     /\b(?:join|joining)\s+(?:the team at\s+)?([^\n.!?]{2,200})/i,
   ];
@@ -130,6 +136,7 @@ function extractCompany(value: string, senderName: string | null) {
 function extractPosition(value: string) {
   const patterns = [
     /\binterview you for (?:the )?([\s\S]{2,100}?)\s+position(?:\s+(?:at|with)\b|[.!?\n])/i,
+    /\bapplication (?:for|to) (?:the )?([^\n,.!?]{2,100}?)(?=\s+(?:position|role)\b|,|[.!?\n])/i,
     /\bapplication (?:for|to) (?:the )?([^\n.!?]{2,100}?)(?: position| role)?[.!?\n]/i,
     /\boffer you (?:the )?([^\n.!?]{2,100}?) position\b/i,
     /\bthe ([^\n.!?]{2,100}?) position\b/i,
@@ -153,30 +160,54 @@ function extractMeetingUrl(links: string[]) {
   }) ?? null;
 }
 
-export function classifyEmail(email: ParsedEmail): ClassifiedEmail {
-  if (email.metadataScore < 20) {
-    return {
-      classification: "NOT_JOB_RELATED",
-      confidence: 0.98,
-      evidence: `Metadata score ${email.metadataScore} was below the processing threshold.`,
-      extractedCompany: null,
-      extractedJobId: null,
-      extractedPosition: null,
-      meetingUrl: null,
-    };
-  }
+/**
+ * Whether this is bulk mail rather than a message about one application.
+ *
+ * Phrase rules run before any metadata check, so a job-alert digest saying
+ * "next round" or "phone screen" in marketing copy used to classify as an
+ * interview request at full confidence and drive an automatic status change,
+ * even at a metadata score of -80. Real ATS mail that carries an unsubscribe
+ * header still scores well on its sending domain and subject, so requiring a
+ * negative score alongside it keeps genuine notifications out of this.
+ */
+function isBulkMail(email: ParsedEmail) {
+  return promotionalSubject.test(email.subject)
+    || (email.hasUnsubscribe && email.metadataScore < 0);
+}
 
+export function classifyEmail(email: ParsedEmail): ClassifiedEmail {
   const searchable = `${email.subject}\n${email.bodyText}`;
+  // Mail is hard-wrapped around 72 characters, so a phrase like "decided to
+  // move forward with other candidates" is routinely split across a line
+  // break and never matches a rule written as one line. Classification runs
+  // against a flattened copy; entity extraction keeps the original, where
+  // newlines still bound a captured span.
+  const flattened = searchable.replace(/\s+/g, " ");
+  const bulk = isBulkMail(email);
   for (const rule of rules) {
     for (const pattern of rule.patterns) {
-      const match = pattern.exec(searchable);
+      const match = pattern.exec(flattened);
       if (match) {
+        // A recruiting phrase inside bulk mail is copy, not an event. Recording
+        // it as one would attach the message to an application and move that
+        // application's status. The message stays recoverable from review.
+        if (bulk) {
+          return {
+            classification: "NOT_JOB_RELATED",
+            confidence: 0.8,
+            evidence: `Bulk mail matched "${match[0].slice(0, 120)}" but scored ${email.metadataScore} on sender and subject.`,
+            extractedCompany: extractCompany(searchable, email.senderName),
+            extractedJobId: jobIdPattern.exec(flattened)?.[1] ?? null,
+            extractedPosition: extractPosition(searchable),
+            meetingUrl: null,
+          };
+        }
         return {
           classification: rule.classification,
           confidence: 0.92,
           evidence: match[0].slice(0, 240),
           extractedCompany: extractCompany(searchable, email.senderName),
-          extractedJobId: jobIdPattern.exec(searchable)?.[1] ?? null,
+          extractedJobId: jobIdPattern.exec(flattened)?.[1] ?? null,
           extractedPosition: extractPosition(searchable),
           meetingUrl: rule.classification === "INTERVIEW_REQUESTED" ? extractMeetingUrl(email.links) : null,
         };
@@ -184,12 +215,24 @@ export function classifyEmail(email: ParsedEmail): ClassifiedEmail {
     }
   }
 
+  if (email.metadataScore < 20) {
+    return {
+      classification: "NOT_JOB_RELATED",
+      confidence: 0.85,
+      evidence: `No recruiting event was detected; metadata score was ${email.metadataScore}.`,
+      extractedCompany: extractCompany(searchable, email.senderName),
+      extractedJobId: jobIdPattern.exec(flattened)?.[1] ?? null,
+      extractedPosition: extractPosition(searchable),
+      meetingUrl: null,
+    };
+  }
+
   return {
     classification: "UNKNOWN_EMAIL_EVENT",
     confidence: 0.4,
     evidence: `Metadata score ${email.metadataScore} indicated a possible recruiting message, but no event rule matched.`,
     extractedCompany: extractCompany(searchable, email.senderName),
-    extractedJobId: jobIdPattern.exec(searchable)?.[1] ?? null,
+    extractedJobId: jobIdPattern.exec(flattened)?.[1] ?? null,
     extractedPosition: extractPosition(searchable),
     meetingUrl: null,
   };

@@ -1,11 +1,8 @@
 import { z } from "zod";
-import { applicationSources, applicationStatuses, captureStatuses, eventSources, eventTypes } from "@manager/types";
+import { applicationSources, applicationStatuses } from "@rolesave/types";
 
 export const applicationStatusSchema = z.enum(applicationStatuses);
-export const applicationSourceSchema = z.enum(applicationSources);
-export const eventTypeSchema = z.enum(eventTypes);
-export const eventSourceSchema = z.enum(eventSources);
-export const captureStatusSchema = z.enum(captureStatuses);
+const applicationSourceSchema = z.enum(applicationSources);
 
 export const authCredentialsSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")),
@@ -45,14 +42,7 @@ export const captureQueueJobSchema = captureJobSchema.extend({
   jobId: z.uuid(),
 });
 
-export const inboundEmailEnvelopeSchema = z.object({
-  providerMessageId: z.string().trim().min(1).max(512),
-  recipient: z.string().trim().toLowerCase().pipe(z.email()),
-});
-
 export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 export type AuthCredentialsInput = z.infer<typeof authCredentialsSchema>;
-export type CaptureMetadataInput = z.infer<typeof captureMetadataSchema>;
 export type CaptureJobInput = z.infer<typeof captureJobSchema>;
 export type CaptureQueueJobInput = z.infer<typeof captureQueueJobSchema>;
-export type InboundEmailEnvelopeInput = z.infer<typeof inboundEmailEnvelopeSchema>;

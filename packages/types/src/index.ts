@@ -1,7 +1,15 @@
+// Mirrors the application_status Postgres enum exactly, so rows read back from
+// the database always satisfy this type.
 export const applicationStatuses = [
   "SAVED", "APPLIED", "ASSESSMENT", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN", "NEEDS_REVIEW",
 ] as const;
 export type ApplicationStatus = (typeof applicationStatuses)[number];
+
+// What a person may actually choose. NEEDS_REVIEW is a legacy enum member that
+// nothing assigns: review of an uncertain email lives in review_tasks, never in
+// the application's own status. It stays above only until the enum is rebuilt.
+export const selectableApplicationStatuses = applicationStatuses
+  .filter((status): status is Exclude<ApplicationStatus, "NEEDS_REVIEW"> => status !== "NEEDS_REVIEW");
 
 export const applicationSources = ["EXTENSION", "EMAIL", "MANUAL"] as const;
 export type ApplicationSource = (typeof applicationSources)[number];
@@ -18,28 +26,3 @@ export type EventSource = (typeof eventSources)[number];
 
 export const captureStatuses = ["PENDING", "PROCESSING", "COMPLETE", "FAILED"] as const;
 export type CaptureStatus = (typeof captureStatuses)[number];
-
-export interface ApplicationSummary {
-  id: string;
-  company: string;
-  position: string;
-  status: ApplicationStatus;
-  source: ApplicationSource;
-  originalUrl: string | null;
-  appliedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  jobDescriptionStatus: CaptureStatus | null;
-}
-
-export interface CaptureJob {
-  applicationId: string;
-  documentId: string;
-  userId: string;
-  temporaryStoragePath: string;
-  outputStoragePath: string;
-  company: string;
-  position: string;
-  originalUrl: string;
-  capturedAt: string;
-}

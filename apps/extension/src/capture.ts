@@ -5,6 +5,7 @@ export interface PageMetadata {
   position: string;
   url: string;
   title: string;
+  jobId: string | null;
 }
 
 export interface PendingApplication {
@@ -14,15 +15,21 @@ export interface PendingApplication {
   savedAt: string;
 }
 
-const pendingApplicationKey = "ledger.pendingApplication";
+const pendingApplicationKey = "rolesave.pendingApplication";
 const pendingApplicationLifetime = 7 * 24 * 60 * 60 * 1_000;
 
 interface CaptureSession {
   application_id: string;
+  application_reused: boolean;
   capture_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
   document_id: string;
   job_id: string;
   temporary_storage_path: string;
+}
+
+export interface CaptureResult {
+  applicationId: string;
+  reused: boolean;
 }
 
 function getActiveTab() {
@@ -91,7 +98,30 @@ export async function readPageMetadata(): Promise<PageMetadata> {
         document.title.split(/\s+[|–—]\s+|\s+-\s+/)[0]?.trim() ||
         "Job posting";
 
-      return { company, position, title: document.title };
+      // schema.org allows identifier to be a bare string, a PropertyValue, or
+      // an array of either. This is the employer's own requisition number and
+      // the strongest signal available for matching later email to this role.
+      const readIdentifier = (value: unknown): string | null => {
+        if (typeof value === "string" || typeof value === "number") {
+          return cleanText(String(value)) || null;
+        }
+        if (Array.isArray(value)) {
+          for (const entry of value) {
+            const found = readIdentifier(entry);
+            if (found) return found;
+          }
+          return null;
+        }
+        if (value && typeof value === "object") {
+          const record = value as Record<string, unknown>;
+          return readIdentifier(record.value ?? record.identifier ?? record.name);
+        }
+        return null;
+      };
+      const identifier = readIdentifier(job?.identifier);
+      const jobId = identifier && identifier.length <= 100 ? identifier : null;
+
+      return { company, position, title: document.title, jobId };
     },
   });
 
@@ -110,12 +140,13 @@ function saveAsMhtml(tabId: number) {
   });
 }
 
-export async function captureJob(metadata: PageMetadata, idempotencyKey: string): Promise<string> {
+export async function captureJob(metadata: PageMetadata, idempotencyKey: string): Promise<CaptureResult> {
   const tab = await getActiveTab();
   const { data, error } = await supabase.rpc("create_capture_session", {
     p_captured_at: new Date().toISOString(),
     p_company: metadata.company,
     p_idempotency_key: idempotencyKey,
+    p_job_id: metadata.jobId,
     p_original_url: metadata.url,
     p_position: metadata.position,
   });
@@ -127,7 +158,9 @@ export async function captureJob(metadata: PageMetadata, idempotencyKey: string)
   try {
     const prepared = await supabase.rpc("retry_capture_upload", { p_job_id: session.job_id });
     if (prepared.error) throw prepared.error;
-    if (!prepared.data) return session.application_id;
+    if (!prepared.data) {
+      return { applicationId: session.application_id, reused: session.application_reused };
+    }
 
     if (session.capture_status === "FAILED") {
       const removal = await supabase.storage.from("temporary-captures").remove([session.temporary_storage_path]);
@@ -153,7 +186,7 @@ export async function captureJob(metadata: PageMetadata, idempotencyKey: string)
     throw error;
   }
 
-  return session.application_id;
+  return { applicationId: session.application_id, reused: session.application_reused };
 }
 
 export async function markApplicationApplied(applicationId: string) {

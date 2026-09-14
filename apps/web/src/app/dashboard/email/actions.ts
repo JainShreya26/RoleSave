@@ -3,7 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth";
-import { getEmailSimulatorBaseUrl, getInboundEmailDomain, getInboundEmailWebhookSecret } from "@/lib/email";
+import { getInboundEmailDomain, isEmailSimulatorEnabled } from "@/lib/email";
+import { enqueueInboundEmail } from "@/lib/inbound-email";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface EmailConnectionActionState {
   message?: string;
@@ -14,6 +16,67 @@ const simulatorScenarios = ["APPLICATION_CONFIRMED", "ASSESSMENT_REQUESTED", "IN
 
 function safeHeader(value: string) {
   return value.replace(/[\r\n]+/g, " ").trim().slice(0, 300);
+}
+
+const emailAddressPattern = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+export async function importEmailAction(
+  _previousState: EmailConnectionActionState,
+  formData: FormData,
+): Promise<EmailConnectionActionState> {
+  void _previousState;
+  const senderAddressValue = formData.get("senderAddress");
+  const senderNameValue = formData.get("senderName");
+  const subjectValue = formData.get("subject");
+  const bodyValue = formData.get("body");
+  const senderAddress = typeof senderAddressValue === "string" ? senderAddressValue.trim().toLowerCase() : "";
+  const senderName = typeof senderNameValue === "string" ? senderNameValue.trim() : "";
+  const subject = typeof subjectValue === "string" ? subjectValue.trim() : "";
+  const body = typeof bodyValue === "string" ? bodyValue.trim() : "";
+
+  if (!emailAddressPattern.test(senderAddress)) return { message: "Enter the sender's email address." };
+  if (subject.length < 1 || subject.length > 500) return { message: "Enter a subject of 500 characters or fewer." };
+  if (senderName.length > 200) return { message: "The sender name must be 200 characters or fewer." };
+  if (body.length < 1 || body.length > 100_000) return { message: "Paste between 1 and 100,000 characters of email text." };
+
+  const { supabase, viewer } = await requireViewer();
+  const { data: account, error: accountError } = await supabase
+    .from("email_accounts")
+    .select("email_address")
+    .eq("user_id", viewer.id)
+    .eq("provider", "FORWARDING")
+    .maybeSingle();
+  if (accountError || !account) return { message: "Create a RoleSave forwarding address before importing email." };
+
+  const messageId = `${randomUUID()}@manual.rolesave.local`;
+  const from = senderName ? `${safeHeader(senderName)} <${senderAddress}>` : senderAddress;
+  const rawEmail = Buffer.from([
+    `From: ${from}`,
+    `To: ${safeHeader(account.email_address)}`,
+    `Subject: ${safeHeader(subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: <${messageId}>`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    body,
+    "",
+  ].join("\r\n"));
+
+  try {
+    await enqueueInboundEmail({
+      providerMessageId: `manual:${messageId}`,
+      rawEmail,
+      recipient: account.email_address,
+    });
+  } catch (error) {
+    return { message: `Unable to import the email: ${error instanceof Error ? error.message : String(error)}` };
+  }
+
+  revalidatePath("/dashboard/email");
+  revalidatePath("/dashboard/review");
+  return { message: "Email queued. The local worker will classify and match it.", success: true };
 }
 
 function buildSimulatedEmail(application: { company: string; job_id: string | null; position: string }, scenario: typeof simulatorScenarios[number]) {
@@ -30,7 +93,7 @@ function buildSimulatedEmail(application: { company: string; job_id: string | nu
       subject: `Technical assessment for your ${company} application`,
     },
     INTERVIEW_REQUESTED: {
-      body: `We would like to interview you for the ${position} position.\nSchedule your interview: https://calendly.com/ledger-simulator/interview\nJob ID: ${jobId}`,
+      body: `We would like to interview you for the ${position} position.\nSchedule your interview: https://calendly.com/rolesave-simulator/interview\nJob ID: ${jobId}`,
       subject: `Interview availability for ${position}`,
     },
     REJECTION_RECEIVED: {
@@ -43,13 +106,13 @@ function buildSimulatedEmail(application: { company: string; job_id: string | nu
     },
   } satisfies Record<typeof simulatorScenarios[number], { body: string; subject: string }>;
   const template = templates[scenario];
-  const messageId = `${randomUUID()}@simulator.ledger.local`;
+  const messageId = `${randomUUID()}@simulator.rolesave.local`;
 
   return {
     messageId,
     raw: Buffer.from([
       `From: ${company} Recruiting <notifications@simulator.greenhouse.io>`,
-      "To: Ledger test recipient",
+      "To: RoleSave test recipient",
       `Subject: ${template.subject}`,
       `Date: ${new Date().toUTCString()}`,
       `Message-ID: <${messageId}>`,
@@ -97,6 +160,34 @@ export async function disconnectForwardingAddressAction(
   }
 
   const { supabase, viewer } = await requireViewer();
+  const admin = createAdminClient();
+  const { data: storedMessages, error: storedMessageError } = await admin
+    .from("inbound_email_jobs")
+    .select("id,storage_path")
+    .eq("email_account_id", accountId)
+    .eq("user_id", viewer.id)
+    .is("storage_deleted_at", null);
+  if (storedMessageError) {
+    return { message: `Unable to inspect stored email data: ${storedMessageError.message}` };
+  }
+
+  if (storedMessages.length > 0) {
+    const paths = storedMessages.map((message) => message.storage_path);
+    const { error: storageError } = await admin.storage.from("inbound-emails").remove(paths);
+    if (storageError) {
+      return { message: `Unable to delete stored email data: ${storageError.message}` };
+    }
+
+    const { error: cleanupStateError } = await admin
+      .from("inbound_email_jobs")
+      .update({ storage_deleted_at: new Date().toISOString() })
+      .in("id", storedMessages.map((message) => message.id))
+      .eq("user_id", viewer.id);
+    if (cleanupStateError) {
+      return { message: `Stored email was deleted, but cleanup could not be recorded: ${cleanupStateError.message}` };
+    }
+  }
+
   const { error } = await supabase
     .from("email_accounts")
     .delete()
@@ -117,13 +208,11 @@ export async function simulateInboundEmailAction(
   formData: FormData,
 ): Promise<EmailConnectionActionState> {
   void _previousState;
-  const baseUrl = getEmailSimulatorBaseUrl();
-  const webhookSecret = getInboundEmailWebhookSecret();
   const applicationId = formData.get("applicationId");
   const scenarioValue = formData.get("scenario");
   const scenario = simulatorScenarios.find((item) => item === scenarioValue);
 
-  if (!baseUrl || !webhookSecret) return { message: "The local email simulator is not enabled." };
+  if (!isEmailSimulatorEnabled()) return { message: "The local email simulator is not enabled." };
   if (typeof applicationId !== "string" || !/^[0-9a-f-]{36}$/i.test(applicationId) || !scenario) {
     return { message: "Choose an application and email scenario." };
   }
@@ -138,20 +227,13 @@ export async function simulateInboundEmailAction(
 
   const simulated = buildSimulatedEmail(application, scenario);
   try {
-    const response = await fetch(`${baseUrl}/api/v1/webhooks/inbound-email`, {
-      body: simulated.raw,
-      headers: {
-        Authorization: `Bearer ${webhookSecret}`,
-        "Content-Type": "message/rfc822",
-        "X-Ledger-Recipient": account.email_address,
-        "X-Provider-Message-Id": simulated.messageId,
-      },
-      method: "POST",
+    await enqueueInboundEmail({
+      providerMessageId: `simulator:${simulated.messageId}`,
+      rawEmail: simulated.raw,
+      recipient: account.email_address,
     });
-    const result = await response.json() as { error?: string; jobId?: string };
-    if (!response.ok) return { message: result.error ?? `The webhook returned HTTP ${response.status}.` };
   } catch (error) {
-    return { message: `Unable to reach the local webhook: ${error instanceof Error ? error.message : String(error)}` };
+    return { message: `Unable to queue the test email: ${error instanceof Error ? error.message : String(error)}` };
   }
 
   revalidatePath("/dashboard/email");

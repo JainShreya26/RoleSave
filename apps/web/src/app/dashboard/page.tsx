@@ -1,4 +1,4 @@
-import { applicationStatuses, type ApplicationStatus } from "@manager/types";
+import { selectableApplicationStatuses, type ApplicationStatus } from "@rolesave/types";
 import Link from "next/link";
 import { ApplicationCreateForm } from "./application-create-form";
 import { listApplications } from "@/lib/applications";
@@ -27,49 +27,57 @@ export default async function DashboardPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status } = await searchParams;
-  const applications = await listApplications(status);
+  const selectedStatus = selectableApplicationStatuses.find((item) => item === status);
+  const applications = await listApplications(selectedStatus);
+  const emailUpdates = applications.reduce((total, application) => total + application.email_count, 0);
   const summary = [
-    { label: "Total applications", value: applications.length, tone: "ink" },
+    { label: selectedStatus ? "Showing" : "Total applications", value: applications.length, tone: "ink" },
     { label: "Active", value: applications.filter((item) => activeStatuses.has(item.status)).length, tone: "blue" },
     { label: "Interviews", value: applications.filter((item) => item.status === "INTERVIEW").length, tone: "green" },
-    { label: "Needs review", value: applications.filter((item) => item.status === "NEEDS_REVIEW").length, tone: "amber" },
+    { label: "Matched emails", value: emailUpdates, tone: "blue" },
   ];
 
   return (
     <main className="main-content">
       <header className="topbar">
-        <div><p className="eyebrow">Authenticated workspace</p><h1>Your application ledger</h1><p className="intro">Every manual update now writes to your private timeline.</p></div>
+        <div><p className="eyebrow">Applications</p><h1>Your job search, in one place</h1><p className="intro">Track every role, update, and saved job description.</p></div>
         <ApplicationCreateForm />
       </header>
 
       <section aria-label="Application summary" className="summary-grid">
-        {summary.map((item) => <article className={`summary-card ${item.tone}`} key={item.label}><span className="summary-label">{item.label}</span><strong>{item.value}</strong><span className="summary-detail">Current filtered view</span></article>)}
+        {summary.map((item) => <article className={`summary-card ${item.tone}`} key={item.label}><span className="summary-label">{item.label}</span><strong>{item.value}</strong></article>)}
       </section>
 
       <section className="panel applications-panel">
         <div className="panel-heading applications-heading">
-          <div><h2>Applications</h2><p>RLS-scoped records for the signed-in account.</p></div>
+          <div><h2>{selectedStatus ? `${titleCase(selectedStatus)} applications` : "All applications"}</h2><p>Most recently updated first</p></div>
           <form className="filter-form">
             <label htmlFor="status-filter">Status</label>
-            <select defaultValue={status ?? ""} id="status-filter" name="status">
+            <select defaultValue={selectedStatus ?? ""} id="status-filter" name="status">
               <option value="">All statuses</option>
-              {applicationStatuses.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+              {selectableApplicationStatuses.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
             </select>
             <button className="secondary-button" type="submit">Filter</button>
-            {status && <Link className="text-link" href="/dashboard">Clear</Link>}
+            {selectedStatus && <Link className="text-link" href="/dashboard">Clear</Link>}
           </form>
         </div>
         {applications.length === 0 ? (
-          <div className="empty-state"><span>▤</span><h2>No applications here yet</h2><p>Add one manually or clear the current status filter.</p></div>
+          <div className="empty-state"><span>▤</span><h2>No applications here yet</h2><p>{selectedStatus ? "Clear the filter to see your other applications." : "Add your first application to get started."}</p></div>
         ) : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Company & role</th><th>Applied</th><th>Status</th><th>JD</th><th>Updated</th></tr></thead>
+              <thead><tr><th>Company & role</th><th>Applied</th><th>Status</th><th>Email</th><th>JD</th><th>Updated</th></tr></thead>
               <tbody>{applications.map((application) => (
                 <tr key={application.id}>
                   <td><Link className="application-name" href={`/dashboard/applications/${application.id}`}><span className="company-mark">{application.company.slice(0, 1).toUpperCase()}</span><span><strong>{application.company}</strong><small>{application.position}</small></span></Link></td>
                   <td>{formatDate(application.applied_at)}</td>
                   <td><span className={`status ${statusTone(application.status)}`}><i /> {titleCase(application.status)}</span></td>
+                  <td>{application.latest_email ? (
+                    <Link className="application-email-summary" href={`/dashboard/applications/${application.id}#related-emails`} title={application.latest_email.subject}>
+                      <strong>{application.email_count} email{application.email_count === 1 ? "" : "s"}</strong>
+                      <small>{titleCase(application.latest_email.classification)} · {formatDate(application.latest_email.received_at)}</small>
+                    </Link>
+                  ) : <span className="no-email-state">No email</span>}</td>
                   <td><span className={`document-state ${application.document_status === "COMPLETE" ? "ready" : "missing"}`}>{application.document_status ? titleCase(application.document_status) : "Missing"}</span></td>
                   <td><span className="updated-at">{formatDate(application.updated_at)}</span></td>
                 </tr>

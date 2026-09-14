@@ -1,6 +1,6 @@
 "use server";
 
-import { applicationStatusSchema, createApplicationSchema } from "@manager/validation";
+import { applicationStatusSchema, createApplicationSchema } from "@rolesave/validation";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireViewer } from "@/lib/auth";
@@ -57,6 +57,22 @@ export async function createApplicationAction(
   const { supabase, viewer } = await requireViewer();
   const appliedAt =
     parsed.data.appliedAt ?? (status.data === "SAVED" ? null : new Date().toISOString());
+  const identityInput = {
+    p_company: parsed.data.company,
+    p_job_id: parsed.data.jobId ?? null,
+    p_original_url: parsed.data.originalUrl ?? null,
+  };
+  const { data: existingApplicationId, error: identityError } = await supabase.rpc(
+    "find_existing_application",
+    identityInput,
+  );
+  if (identityError) {
+    return { message: `Unable to check for an existing application: ${identityError.message}` };
+  }
+  if (existingApplicationId) {
+    redirect(`/dashboard/applications/${existingApplicationId}?existing=1`);
+  }
+
   const { data: application, error } = await supabase
     .from("applications")
     .insert({
@@ -71,6 +87,13 @@ export async function createApplicationAction(
     })
     .select("id")
     .single();
+
+  if (error?.code === "23505") {
+    const { data: racedApplicationId } = await supabase.rpc("find_existing_application", identityInput);
+    if (racedApplicationId) {
+      redirect(`/dashboard/applications/${racedApplicationId}?existing=1`);
+    }
+  }
 
   if (error || !application) {
     return { message: error?.message ?? "Unable to create the application." };
@@ -93,6 +116,40 @@ export async function createApplicationAction(
 
   revalidatePath("/dashboard");
   redirect(`/dashboard/applications/${application.id}`);
+}
+
+export async function mergeDuplicateApplicationAction(
+  keepApplicationId: string,
+  _previousState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  void _previousState;
+  const mergeApplicationId = formData.get("mergeApplicationId");
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (typeof mergeApplicationId !== "string" || !uuidPattern.test(mergeApplicationId)) {
+    return { message: "Choose the duplicate application to consolidate." };
+  }
+  if (mergeApplicationId === keepApplicationId) {
+    return { message: "Choose a different application to consolidate." };
+  }
+
+  const { supabase } = await requireViewer();
+  const { data, error } = await supabase.rpc("merge_duplicate_applications", {
+    p_keep_application_id: keepApplicationId,
+    p_merge_application_id: mergeApplicationId,
+  });
+  if (error || !data) {
+    return { message: error?.message ?? "The applications could not be consolidated." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/review");
+  revalidatePath("/dashboard/email/activity");
+  revalidatePath(`/dashboard/applications/${keepApplicationId}`);
+  return {
+    message: "Duplicate consolidated. Its PDFs, email matches, and timeline history were moved here.",
+    success: true,
+  };
 }
 
 export async function updateApplicationAction(

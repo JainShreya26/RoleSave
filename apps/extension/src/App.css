@@ -1,30 +1,32 @@
-:root { font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; color:#17233b; background:#f5f6f8; font-synthesis:none; }
+:root { font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; color:#17233b; background:#f6f7f9; font-synthesis:none; }
 * { box-sizing:border-box; }
 body { width:360px; min-height:440px; margin:0; }
 button,input { font:inherit; }
-.popup { min-height:440px; padding:20px; }
+.popup { min-height:440px; padding:22px; }
 .brand-row { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
 .brand-row > div { display:grid; gap:1px; }
 .brand-row strong { font-size:16px; }
-.brand-row small { color:#7b8798; font-size:9px; letter-spacing:.05em; text-transform:uppercase; }
+.brand-row small { color:#7b8798; font-size:10px; letter-spacing:.05em; text-transform:uppercase; }
 .logo { display:grid; grid-template-columns:repeat(3,3px); align-items:end; gap:2px; width:24px; height:24px; padding:5px; border-radius:7px; background:#f2be63; }
 .logo i { height:5px; border-radius:3px; background:#172642; }
 .logo i:nth-child(2) { height:8px; }
 .logo i:nth-child(3) { height:12px; }
-.text-button { width:auto; margin:0 0 0 auto; padding:4px; color:#667286; background:transparent; font-size:10px; }
-.page-card { overflow:hidden; padding:14px; border:1px solid #e0e5eb; border-radius:10px; background:#fff; }
-.page-card .label { display:block; margin-bottom:8px; color:#8b95a4; font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.page-card strong { display:block; overflow:hidden; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
-.page-card p { overflow:hidden; margin:5px 0 0; color:#737f90; font-size:10px; line-height:1.5; text-overflow:ellipsis; white-space:nowrap; }
-label { display:grid; gap:6px; margin-top:14px; color:#536176; font-size:10px; font-weight:650; }
-input { width:100%; border:1px solid #dce2e9; border-radius:8px; padding:10px; color:#26354f; background:#fff; outline:none; }
+.text-button { width:auto; margin:0 0 0 auto; padding:5px; color:#667286; background:transparent; font-size:11px; }
+.page-card { overflow:hidden; padding:15px; border:1px solid #e0e5eb; border-radius:11px; background:#fff; box-shadow:0 1px 2px rgba(18,29,48,.03); }
+.page-card .label { display:block; margin-bottom:8px; color:#8b95a4; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.page-card strong { display:block; overflow:hidden; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+.page-card p { overflow:hidden; margin:6px 0 0; color:#737f90; font-size:11px; line-height:1.5; text-overflow:ellipsis; white-space:nowrap; }
+label { display:grid; gap:7px; margin-top:15px; color:#536176; font-size:11px; font-weight:650; }
+input { width:100%; border:1px solid #dce2e9; border-radius:9px; padding:11px; color:#26354f; background:#fff; outline:none; }
 input:focus { border-color:#d09a3d; box-shadow:0 0 0 3px rgba(208,154,61,.12); }
 input:disabled { color:#8893a3; background:#eceff3; }
-button { border:0; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; }
+button { border:0; border-radius:9px; font-size:11px; font-weight:700; cursor:pointer; }
+button:focus-visible { outline:3px solid rgba(63,111,189,.18); outline-offset:2px; }
 button:disabled { cursor:not-allowed; opacity:.6; }
-.primary { width:100%; margin-top:18px; padding:11px; color:#fff; background:#172642; }
+.primary { width:100%; margin-top:18px; padding:12px; color:#fff; background:#172642; box-shadow:0 2px 7px rgba(23,36,61,.14); }
+.primary:hover { background:#283f65; }
 .success-card { border-color:#cfe5db; background:#f7fcfa; }
 .pending-clear { width:100%; margin-top:9px; padding:7px; color:#7a8595; background:transparent; font-size:9px; }
-.message { margin:12px 0 0; color:#9b5e25; font-size:10px; line-height:1.45; text-align:center; }
+.message { margin:13px 0 0; color:#9b5e25; font-size:11px; line-height:1.45; text-align:center; }
 .message.success { color:#356b58; }
 .message.error { margin-top:160px; color:#a13f3f; }

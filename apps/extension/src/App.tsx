@@ -25,6 +25,7 @@ export default function App() {
   const [applicationId, setApplicationId] = useState<string | null>(null);
   const [pendingApplication, setPendingApplication] = useState<PendingApplication | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [reusedApplication, setReusedApplication] = useState(false);
   const [captureFailed, setCaptureFailed] = useState(false);
   const [applied, setApplied] = useState(false);
   const [messageIsError, setMessageIsError] = useState(false);
@@ -80,12 +81,15 @@ export default function App() {
     setMessageIsError(false);
     setMessage("Capturing this page…");
     try {
-      const id = await captureJob(metadata, idempotencyKey.current);
-      const pending = await rememberPendingApplication(id, metadata);
-      setApplicationId(id);
+      const result = await captureJob(metadata, idempotencyKey.current);
+      const pending = await rememberPendingApplication(result.applicationId, metadata);
+      setApplicationId(result.applicationId);
       setPendingApplication(pending);
+      setReusedApplication(result.reused);
       setJustSaved(true);
-      setMessage("The PDF is being prepared in the background.");
+      setMessage(result.reused
+        ? "This posting was already saved, so RoleSave reused the existing application."
+        : "The PDF is being prepared in the background.");
     } catch (error) {
       setCaptureFailed(true);
       setMessageIsError(true);
@@ -122,6 +126,7 @@ export default function App() {
     setPendingApplication(null);
     setApplicationId(null);
     setApplied(false);
+    setReusedApplication(false);
     setMetadata(null);
     idempotencyKey.current = crypto.randomUUID();
     try {
@@ -142,7 +147,7 @@ export default function App() {
     <main className="popup">
       <header className="brand-row">
         <span className="logo" aria-hidden="true"><i /><i /><i /></span>
-        <div><strong>Ledger</strong><small>Application Tracker</small></div>
+        <div><strong>RoleSave</strong><small>Application Tracker</small></div>
         {session ? <button className="text-button" onClick={() => void supabase.auth.signOut()}>Sign out</button> : null}
       </header>
 
@@ -150,7 +155,7 @@ export default function App() {
         <form onSubmit={signIn}>
           <section className="page-card">
             <span className="label">Connect account</span>
-            <strong>Sign in with your Ledger account</strong>
+            <strong>Sign in with your RoleSave account</strong>
             <p>Use the same email and password as the dashboard.</p>
           </section>
           <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
@@ -160,9 +165,11 @@ export default function App() {
       ) : justSaved && pendingApplication ? (
         <>
           <section className="page-card success-card">
-            <span className="label">Job description saved</span>
+            <span className="label">{reusedApplication ? "Existing application found" : "Job description saved"}</span>
             <strong>{pendingApplication.company} · {pendingApplication.position}</strong>
-            <p>Continue on the employer site. Open Ledger again after you submit the application.</p>
+            <p>{reusedApplication
+              ? "This posting is already on your dashboard. Continue here, then mark it applied only after you submit."
+              : "Continue on the employer site. Open RoleSave again after you submit the application."}</p>
           </section>
           <button className="primary" onClick={() => window.close()}>Continue to application</button>
         </>
@@ -200,7 +207,7 @@ export default function App() {
         </>
       )}
 
-      {message ? <p className={messageIsError ? "message" : "message success"}>{message}</p> : null}
+      {message ? <p className={messageIsError ? "message error" : "message success"}>{message}</p> : null}
     </main>
   );
 }

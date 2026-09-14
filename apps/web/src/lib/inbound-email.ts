@@ -16,34 +16,6 @@ export class InboundEmailQueueError extends Error {
   }
 }
 
-export async function readBodyWithLimit(
-  body: ReadableStream<Uint8Array> | null,
-  declaredLength: string | null,
-  maximumBytes = maximumRawEmailBytes,
-) {
-  const contentLength = Number(declaredLength);
-  if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
-    throw new PayloadTooLargeError();
-  }
-  if (!body) return Buffer.alloc(0);
-
-  const reader = body.getReader();
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > maximumBytes) {
-      await reader.cancel();
-      throw new PayloadTooLargeError();
-    }
-    chunks.push(Buffer.from(value));
-  }
-
-  return Buffer.concat(chunks, totalBytes);
-}
-
 export async function enqueueInboundEmail(input: {
   providerMessageId: string;
   rawEmail: Buffer;

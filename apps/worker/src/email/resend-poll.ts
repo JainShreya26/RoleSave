@@ -126,6 +126,24 @@ async function queueReceivedEmail(
   }
 }
 
+/**
+ * Optional floor on how far back the poller will reach. Resend keeps its own
+ * copy of every message it received, so after the local history is cleared the
+ * inbox would otherwise be replayed from the beginning. Set
+ * RESEND_IGNORE_BEFORE to an ISO timestamp to start from a chosen point;
+ * without it, everything Resend still holds is fair game.
+ */
+function receivedAfterFloor() {
+  const configured = process.env.RESEND_IGNORE_BEFORE?.trim();
+  if (!configured) return null;
+  const floor = new Date(configured);
+  if (Number.isNaN(floor.getTime())) {
+    console.warn(`Ignoring RESEND_IGNORE_BEFORE: ${configured} is not a valid timestamp.`);
+    return null;
+  }
+  return floor;
+}
+
 export async function pollResendInbox(client: SupabaseClient, resend: Resend, inboundDomain: string) {
   const [listed, existing] = await Promise.all([
     resend.emails.receiving.list({ limit: 100 }),
@@ -140,13 +158,16 @@ export async function pollResendInbox(client: SupabaseClient, resend: Resend, in
   if (existing.error) throw existing.error;
 
   const alreadyQueued = new Set(existing.data.map((row) => row.provider_message_id));
+  const floor = receivedAfterFloor();
   const candidates = listed.data.data
     .map((email) => ({
       email,
       recipient: findResendForwardingRecipient(email, inboundDomain),
     }))
     .filter((candidate): candidate is { email: ListReceivingEmail; recipient: string } => (
-      Boolean(candidate.recipient) && !alreadyQueued.has(`resend:${candidate.email.id}`)
+      Boolean(candidate.recipient)
+      && !alreadyQueued.has(`resend:${candidate.email.id}`)
+      && (floor === null || new Date(candidate.email.created_at) >= floor)
     ))
     .sort((left, right) => left.email.created_at.localeCompare(right.email.created_at));
 

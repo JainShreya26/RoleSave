@@ -27,23 +27,26 @@ The verified local PDF spike remains available with:
 pnpm spike:mhtml:serve
 ```
 
-## Inbound email adapter contract
+## Containerized production conversion
 
-Set `INBOUND_EMAIL_DOMAIN` and a random `INBOUND_EMAIL_WEBHOOK_SECRET` of at least
-32 characters. An inbound provider adapter can then enqueue a raw RFC 822 message:
+The background worker now converts untrusted MHTML in a disposable, networkless
+container. Build the image before processing capture jobs:
 
 ```sh
-curl --request POST http://127.0.0.1:3000/api/v1/webhooks/inbound-email \
-  --header "Authorization: Bearer $INBOUND_EMAIL_WEBHOOK_SECRET" \
-  --header "Content-Type: message/rfc822" \
-  --header "X-Ledger-Recipient: jobs+<forwarding-token>@$INBOUND_EMAIL_DOMAIN" \
-  --header "X-Provider-Message-Id: <stable-provider-message-id>" \
-  --data-binary @message.eml
+pnpm mhtml:image:build
+pnpm dev:worker
 ```
 
-The endpoint accepts messages up to 10 MB, stores them in the private
-`inbound-emails` bucket, and deduplicates retries by forwarding account and provider
-message ID. MIME parsing is handled by the next worker stage.
+Docker is the default engine. Set `MHTML_CONTAINER_ENGINE=podman` to use Podman.
+`MHTML_CONVERTER_RUNTIME=local` is available only for explicit local development;
+the worker rejects it when `NODE_ENV=production`.
+
+Failed source payloads are retained for replay for 7 days and failed queue metadata
+for 90 days. Override those defaults with `FAILED_PAYLOAD_RETENTION_DAYS` and
+`FAILED_JOB_RETENTION_DAYS`. The worker enforces retention hourly.
+
+The authenticated **Failed jobs** page shows terminal capture and email failures and
+lets the owning user replay a job while its source payload is retained.
 
 ## Real inbound email with Resend
 
@@ -53,13 +56,11 @@ not required. Configure these server-only values:
 ```text
 INBOUND_EMAIL_DOMAIN=<managed-domain-from-Resend>.resend.app
 RESEND_API_KEY=re_...
-RESEND_WEBHOOK_SECRET=whsec_...
 ```
 
-### Local-only polling (no public hosting)
-
-For a private local installation, `RESEND_WEBHOOK_SECRET` and a public endpoint are
-not required. Keep the web app and worker running locally:
+RoleSave runs only on your machine, so it has no public URL and accepts no inbound
+HTTP at all. The worker fetches mail from Resend instead. Keep the web app and worker
+running locally:
 
 ```sh
 pnpm dev:web
@@ -67,33 +68,24 @@ pnpm dev:worker
 ```
 
 The worker uses `RESEND_API_KEY` to poll the newest received emails every 30 seconds,
-queues only messages addressed to a valid Ledger forwarding address, and relies on the
+queues only messages addressed to a valid RoleSave forwarding address, and relies on the
 database's provider-message ID constraint to prevent duplicate processing. Set
 `RESEND_POLL_INTERVAL_MS` to 10000 or higher to change the interval.
 
-The worker examines the newest 100 messages on each poll. This is sufficient for a
-personal local installation; a hosted multi-user deployment should use the signed
-webhook adapter described below.
+The worker examines the newest 100 messages on each poll, so mail arrives only while
+the worker is running. If it stays off long enough for more than 100 messages to
+accumulate at the forwarding address, the oldest are missed and must be added through
+**Import a missed email**.
 
-### Optional hosted webhook
-
-In Resend, create a webhook for the `email.received` event pointing to the publicly
-accessible URL below:
-
-```text
-https://<public-app-host>/api/v1/webhooks/resend
-```
-
-The adapter verifies Resend's signed webhook, retrieves the original RFC 822 email,
-enforces the same 10 MB limit, and enqueues it through the existing idempotent queue.
-The API key is used only on the server to retrieve the received email. The raw email
-is deleted from Supabase after the worker finishes, although Resend retains its own
-provider copy according to the account's retention policy.
+If a selective Gmail rule misses a message, open **Email connection → Import a missed
+email** and paste its sender, subject, and text. Manual imports enter the same private
+queue and worker pipeline as forwarded mail. Messages that reach RoleSave but are not
+recognized appear under **Needs review → Ignored emails** with a bounded text preview;
+they can be restored, classified, and attached to an application there.
 
 After setting the real receiving domain, disconnect and recreate any address that was
 issued for `inbound.localhost.test`. Then add the new `jobs+...@<domain>` address as a
-forwarding destination in Gmail or Outlook. For local testing, the Resend webhook URL
-must use an HTTPS tunnel; `127.0.0.1` is not reachable from Resend.
+forwarding destination in Gmail or Outlook.
 
 ### Free local end-to-end simulation
 
@@ -101,9 +93,7 @@ Set the following server-only values in `apps/web/.env.local`:
 
 ```text
 INBOUND_EMAIL_DOMAIN=inbound.localhost.test
-INBOUND_EMAIL_WEBHOOK_SECRET=<at-least-32-random-characters>
 ENABLE_EMAIL_SIMULATOR=true
-EMAIL_SIMULATOR_BASE_URL=http://127.0.0.1:3000
 ```
 
 Start `pnpm dev:web`, open **Email connection**, create an address, and use the
@@ -129,7 +119,18 @@ pnpm supabase:status
 
 Copy `.env.example` to `.env.local`. Use the printed local URL and anonymous key for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the local anonymous key acts as the development publishable key. Copy the service-role key only for future server/worker integration. Never put the service-role key in browser or extension code.
 
-Restart `pnpm dev:web`, create two accounts through `/auth`, and verify that each account sees only its own records. That cross-user check is the remaining Milestone 2 exit condition.
+Restart `pnpm dev:web` and create an account through `/auth`. Cross-user isolation is
+covered automatically by the authorization commands below and in CI.
+
+Automated authorization coverage is available with:
+
+```sh
+pnpm test:authorization
+pnpm exec supabase test db
+```
+
+The first command verifies cross-user database, storage, and replay isolation through
+the same Supabase APIs used by the application. The second runs the pgTAP RLS suite.
 
 Stop the local stack without deleting its database with:
 

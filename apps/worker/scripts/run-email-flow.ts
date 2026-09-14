@@ -1,16 +1,59 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import process from "node:process";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runEmailWorkerOnce } from "../src/index";
 
-const testCompany = "Ledger Email Flow Test";
+const testCompany = "RoleSave Email Flow Test";
 const testPosition = "Integration Test Engineer";
-const testJobId = "LEDGER-EMAIL-FLOW-001";
+const testJobId = "ROLESAVE-EMAIL-FLOW-001";
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required.`);
   return value;
+}
+
+/**
+ * Queues a raw message exactly as the Resend poller does. RoleSave runs only on
+ * this machine, so there is no HTTP endpoint in front of the queue to call.
+ */
+async function enqueue(
+  client: SupabaseClient,
+  recipient: string,
+  providerMessageId: string,
+  rawEmail: Buffer,
+  inboundDomain: string,
+) {
+  const match = /^jobs\+([0-9a-f]{36})@(.+)$/.exec(recipient.trim().toLowerCase());
+  if (!match || match[2] !== inboundDomain) {
+    throw new Error(`${recipient} is not a RoleSave forwarding address on ${inboundDomain}.`);
+  }
+
+  const prepared = await client.rpc("prepare_inbound_email_job", {
+    p_forwarding_token: match[1],
+    p_provider_message_id: providerMessageId,
+  });
+  const job = prepared.data?.[0] as { already_queued: boolean; job_id: string; storage_path: string } | undefined;
+  if (prepared.error || !job) throw prepared.error ?? new Error("Unable to prepare the email job.");
+  if (job.already_queued) return { alreadyQueued: true, jobId: job.job_id };
+
+  const upload = await client.storage.from("inbound-emails").upload(job.storage_path, rawEmail, {
+    contentType: "message/rfc822",
+    upsert: true,
+  });
+  if (upload.error) {
+    await client.rpc("fail_inbound_email_upload", { p_error: upload.error.message, p_job_id: job.job_id });
+    throw upload.error;
+  }
+
+  const finalized = await client.rpc("finalize_inbound_email_upload", {
+    p_file_size_bytes: rawEmail.byteLength,
+    p_job_id: job.job_id,
+  });
+  if (finalized.error || !finalized.data) {
+    throw finalized.error ?? new Error("Unable to finalize the email job.");
+  }
+  return { alreadyQueued: false, jobId: job.job_id };
 }
 
 async function main() {
@@ -19,8 +62,6 @@ async function main() {
   if (!serverKey) throw new Error("SUPABASE_SECRET_KEY is required.");
 
   const inboundDomain = requiredEnvironment("INBOUND_EMAIL_DOMAIN");
-  const webhookSecret = requiredEnvironment("INBOUND_EMAIL_WEBHOOK_SECRET");
-  const webhookBaseUrl = process.env.EMAIL_SIMULATOR_BASE_URL?.trim() || "http://127.0.0.1:3000";
   const client = createClient(supabaseUrl, serverKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -91,9 +132,9 @@ async function main() {
     emailAccount = created.data;
   }
 
-  const messageId = `${randomUUID()}@ledger-flow.local`;
+  const messageId = `${randomUUID()}@rolesave-flow.local`;
   const rawEmail = Buffer.from([
-    "From: Ledger Email Flow Test Recruiting <notifications@testcorp.example>",
+    "From: RoleSave Email Flow Test Recruiting <notifications@testcorp.example>",
     `To: ${emailAccount.email_address}`,
     `Subject: Interview availability for ${testPosition}`,
     `Date: ${new Date().toUTCString()}`,
@@ -102,26 +143,12 @@ async function main() {
     "Content-Type: text/plain; charset=utf-8",
     "",
     `We would like to interview you for the ${testPosition} position.`,
-    "Schedule your interview: https://calendly.com/ledger-simulator/interview",
+    "Schedule your interview: https://calendly.com/rolesave-simulator/interview",
     `Job ID: ${testJobId}`,
     "",
   ].join("\r\n"));
-  const headers = {
-    Authorization: `Bearer ${webhookSecret}`,
-    "Content-Type": "message/rfc822",
-    "X-Ledger-Recipient": emailAccount.email_address,
-    "X-Provider-Message-Id": messageId,
-  };
-
-  const queuedResponse = await fetch(`${webhookBaseUrl}/api/v1/webhooks/inbound-email`, {
-    body: rawEmail,
-    headers,
-    method: "POST",
-  });
-  const queued = await queuedResponse.json() as { duplicate?: boolean; error?: string; jobId?: string };
-  if (queuedResponse.status !== 202 || !queued.jobId || queued.duplicate) {
-    throw new Error(queued.error ?? `Webhook queueing failed with HTTP ${queuedResponse.status}.`);
-  }
+  const queued = await enqueue(client, emailAccount.email_address, messageId, rawEmail, inboundDomain);
+  if (queued.alreadyQueued) throw new Error("The first enqueue was unexpectedly treated as a duplicate.");
 
   const processed = await runEmailWorkerOnce(client);
   if (!processed) throw new Error("The worker did not claim the queued email.");
@@ -139,19 +166,14 @@ async function main() {
     throw applicationResult.error ?? eventResult.error ?? jobResult.error;
   }
 
-  const duplicateResponse = await fetch(`${webhookBaseUrl}/api/v1/webhooks/inbound-email`, {
-    body: rawEmail,
-    headers,
-    method: "POST",
-  });
-  const duplicate = await duplicateResponse.json() as { duplicate?: boolean; jobId?: string };
+  const duplicate = await enqueue(client, emailAccount.email_address, messageId, rawEmail, inboundDomain);
   const rawDownload = await client.storage.from("inbound-emails").download(jobResult.data.storage_path);
 
   const checks = {
     applicationAutoMatched: eventResult.data.application_id === application.id,
     applicationStatus: applicationResult.data.status,
     classification: eventResult.data.classification,
-    duplicateIgnored: duplicateResponse.status === 202 && duplicate.duplicate === true && duplicate.jobId === queued.jobId,
+    duplicateIgnored: duplicate.alreadyQueued && duplicate.jobId === queued.jobId,
     jobStatus: jobResult.data.status,
     rawEmailDeleted: Boolean(rawDownload.error),
     reviewStatus: eventResult.data.review_status,

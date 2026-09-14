@@ -1,5 +1,5 @@
 {
-  "name": "@manager/mhtml-capture-spike",
+  "name": "@rolesave/mhtml-capture-spike",
   "private": true,
   "type": "module",
   "scripts": {

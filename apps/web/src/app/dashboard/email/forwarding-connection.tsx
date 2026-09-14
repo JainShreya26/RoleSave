@@ -45,10 +45,10 @@ export function ForwardingConnection({
       <section className="panel connection-card">
         <div className="connection-icon" aria-hidden="true">@</div>
         <div>
-          <p className="eyebrow">Provider-neutral MVP</p>
+          <p className="eyebrow">Private forwarding address</p>
           <h2>Forward application emails</h2>
           <p className="connection-description">
-            Create a private Ledger address, then forward confirmations, assessments, interviews,
+            Create a private RoleSave address, then forward confirmations, assessments, interviews,
             rejections, and offers from any mailbox.
           </p>
           <form action={issueAction}>

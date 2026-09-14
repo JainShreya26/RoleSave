@@ -5,10 +5,10 @@ Date: Sat, 22 Aug 2026 14:10:00 -0400
 MIME-Version: 1.0
 Content-Type: multipart/related;
 	type="text/html";
-	boundary="----MultipartBoundary--manager-spike-01"
+	boundary="----MultipartBoundary--rolesave-spike-01"
 
 
-------MultipartBoundary--manager-spike-01
+------MultipartBoundary--rolesave-spike-01
 Content-Type: text/html
 Content-ID: <frame-001@mhtml.blink>
 Content-Transfer-Encoding: quoted-printable
@@ -49,4 +49,4 @@ Content-Location: https://jobs.example.test/systems-engineer
 </body>
 </html>
 
-------MultipartBoundary--manager-spike-01--
+------MultipartBoundary--rolesave-spike-01--

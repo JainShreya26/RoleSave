@@ -9,6 +9,44 @@ export interface ReviewActionState {
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const restorableClassifications = new Set([
+  "APPLICATION_CONFIRMED",
+  "ASSESSMENT_REQUESTED",
+  "INTERVIEW_REQUESTED",
+  "OFFER_RECEIVED",
+  "REJECTION_RECEIVED",
+  "UNKNOWN_EMAIL_EVENT",
+]);
+
+export async function restoreIgnoredEmailAction(
+  _previousState: ReviewActionState,
+  formData: FormData,
+): Promise<ReviewActionState> {
+  void _previousState;
+  const emailEventId = formData.get("emailEventId");
+  const applicationId = formData.get("applicationId");
+  const classification = formData.get("classification");
+  if (typeof emailEventId !== "string" || !uuidPattern.test(emailEventId)
+    || typeof applicationId !== "string" || !uuidPattern.test(applicationId)
+    || typeof classification !== "string" || !restorableClassifications.has(classification)) {
+    return { message: "Choose an application and a valid email update type." };
+  }
+
+  const { supabase } = await requireViewer();
+  const { data, error } = await supabase.rpc("restore_ignored_email_event", {
+    p_application_id: applicationId,
+    p_classification: classification,
+    p_email_event_id: emailEventId,
+  });
+  if (error || !data) {
+    return { message: error?.message ?? "This ignored email is no longer available." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/review");
+  revalidatePath(`/dashboard/applications/${applicationId}`);
+  return { message: "Email restored and attached to the application.", success: true };
+}
 
 export async function resolveReviewTaskAction(
   _previousState: ReviewActionState,

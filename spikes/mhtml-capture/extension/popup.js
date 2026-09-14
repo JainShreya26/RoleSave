@@ -52,7 +52,7 @@ async function convertCapture(capture, metadata) {
       method: "POST",
       headers: {
         "Content-Type": "application/octet-stream",
-        "X-Manager-Metadata": encodeMetadata(metadata),
+        "X-RoleSave-Metadata": encodeMetadata(metadata),
       },
       body: capture,
       signal: controller.signal,

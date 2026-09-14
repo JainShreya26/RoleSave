@@ -26,7 +26,7 @@ try {
     headers: {
       "Content-Type": "application/octet-stream",
       "Origin": "https://untrusted.example",
-      "X-Manager-Metadata": encodedMetadata,
+      "X-RoleSave-Metadata": encodedMetadata,
     },
     body: capture,
   });
@@ -37,7 +37,7 @@ try {
     headers: {
       "Content-Type": "application/octet-stream",
       "Origin": extensionOrigin,
-      "X-Manager-Metadata": encodedMetadata,
+      "X-RoleSave-Metadata": encodedMetadata,
     },
     body: capture,
   });

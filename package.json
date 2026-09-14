@@ -1,15 +1,16 @@
 {
-  "name": "manager",
+  "name": "rolesave",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
-    "dev:extension": "pnpm --filter @manager/extension dev",
-    "dev:web": "pnpm --filter @manager/web dev",
-    "dev:worker": "pnpm --filter @manager/worker dev",
-    "email:flow": "pnpm --filter @manager/worker email-flow",
-    "email:process-once": "pnpm --filter @manager/worker start -- --once",
+    "dev:extension": "pnpm --filter @rolesave/extension dev",
+    "dev:web": "pnpm --filter @rolesave/web dev",
+    "dev:worker": "pnpm --filter @rolesave/worker dev",
+    "email:flow": "pnpm --filter @rolesave/worker email-flow",
+    "email:process-once": "pnpm --filter @rolesave/worker start -- --once",
     "lint": "pnpm --recursive --if-present run lint",
+    "mhtml:image:build": "docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:local .",
     "spike:mhtml:convert": "node spikes/mhtml-capture/scripts/convert.mjs",
     "spike:mhtml:serve": "node spikes/mhtml-capture/scripts/server.mjs",
     "spike:mhtml:verify": "node spikes/mhtml-capture/scripts/verify.mjs",
@@ -19,6 +20,9 @@
     "supabase:status": "supabase status",
     "supabase:stop": "supabase stop",
     "test": "pnpm --recursive --if-present run test",
+    "test:authorization": "pnpm --filter @rolesave/worker test:authorization",
+    "test:cleanup": "bash scripts/test-cleanup-migration.sh",
+    "test:fingerprint": "bash scripts/test-fingerprint.sh",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "devDependencies": {

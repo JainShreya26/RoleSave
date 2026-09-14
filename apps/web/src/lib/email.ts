@@ -7,19 +7,9 @@ export function getInboundEmailDomain() {
   return domain && domainPattern.test(domain) ? domain : null;
 }
 
-export function getInboundEmailWebhookSecret() {
-  const secret = process.env.INBOUND_EMAIL_WEBHOOK_SECRET?.trim();
-  return secret && secret.length >= 32 ? secret : null;
-}
-
 export function getResendApiKey() {
   const key = process.env.RESEND_API_KEY?.trim();
   return key && key.length >= 16 ? key : null;
-}
-
-export function getResendWebhookSecret() {
-  const secret = process.env.RESEND_WEBHOOK_SECRET?.trim();
-  return secret && secret.length >= 16 ? secret : null;
 }
 
 export function extractForwardingToken(recipient: string, expectedDomain: string) {
@@ -28,17 +18,8 @@ export function extractForwardingToken(recipient: string, expectedDomain: string
   return match[1];
 }
 
-export function getEmailSimulatorBaseUrl() {
-  if (process.env.NODE_ENV === "production" || process.env.ENABLE_EMAIL_SIMULATOR !== "true") {
-    return null;
-  }
-
-  const configured = process.env.EMAIL_SIMULATOR_BASE_URL?.trim() || "http://127.0.0.1:3000";
-  try {
-    const url = new URL(configured);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
+// The simulator queues a synthetic message straight into the inbound queue, so
+// it needs no base URL and no shared secret: it never leaves this process.
+export function isEmailSimulatorEnabled() {
+  return process.env.NODE_ENV !== "production" && process.env.ENABLE_EMAIL_SIMULATOR === "true";
 }

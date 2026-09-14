@@ -8,6 +8,7 @@ coverage/
 .env
 .env.*
 !.env.example
+.supabase-ci.env
 supabase/.temp/
 
 # MHTML/PDF spike output can contain private job-page data.

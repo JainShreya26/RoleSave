@@ -51,12 +51,13 @@ docs/          Development notes and implementation roadmap
 
 - Node.js
 - pnpm 11.19 or newer
-- A Docker-compatible runtime for local Supabase
+- A Docker-compatible runtime for local Supabase and isolated PDF conversion
 
 Install dependencies:
 
 ```sh
 pnpm install
+pnpm mhtml:image:build
 ```
 
 Start the local Supabase stack:
@@ -103,6 +104,8 @@ For detailed Supabase, inbound-email, Resend, and simulator instructions, see
 | `pnpm dev:worker` | Start the email worker |
 | `pnpm email:process-once` | Process currently queued email once |
 | `pnpm test` | Run the test suite |
+| `pnpm test:authorization` | Run two-user database, storage, and replay isolation tests |
+| `pnpm mhtml:image:build` | Build the isolated MHTML converter image |
 | `pnpm typecheck` | Type-check all workspaces |
 | `pnpm lint` | Run configured linters |
 | `pnpm build` | Build all buildable workspaces |

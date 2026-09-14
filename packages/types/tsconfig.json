@@ -1,4 +1,4 @@
 {
-  "extends": "@manager/config/typescript/base.json",
+  "extends": "@rolesave/config/typescript/base.json",
   "include": ["src/**/*.ts"]
 }

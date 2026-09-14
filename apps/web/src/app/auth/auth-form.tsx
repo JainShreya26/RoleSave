@@ -11,6 +11,10 @@ export function AuthForm() {
 
   return (
     <div className="auth-card">
+      <div className="auth-card-brand">
+        <span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>
+        <strong>RoleSave</strong>
+      </div>
       <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
         <button
           aria-selected={intent === "sign-in"}

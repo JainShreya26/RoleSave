@@ -1,9 +1,9 @@
 {
-  "name": "@manager/types",
+  "name": "@rolesave/types",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "build": "tsc --noEmit", "typecheck": "tsc --noEmit" },
-  "devDependencies": { "@manager/config": "workspace:*", "typescript": "^5" }
+  "devDependencies": { "@rolesave/config": "workspace:*", "typescript": "^5" }
 }

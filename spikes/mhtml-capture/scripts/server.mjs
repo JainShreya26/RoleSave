@@ -160,11 +160,11 @@ async function handleRequest(request, response, convert) {
 
   if (request.method === "OPTIONS" && requestUrl.pathname === "/v1/convert") {
     if (!isAllowedExtensionOrigin(origin)) {
-      throw new HttpError(403, "ORIGIN_NOT_ALLOWED", "Only the Manager Chrome extension is allowed.");
+      throw new HttpError(403, "ORIGIN_NOT_ALLOWED", "Only the RoleSave Chrome extension is allowed.");
     }
     applyCors(response, origin);
     response.writeHead(204, {
-      "Access-Control-Allow-Headers": "Content-Type, X-Manager-Metadata",
+      "Access-Control-Allow-Headers": "Content-Type, X-RoleSave-Metadata",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Max-Age": "600",
     });
@@ -176,12 +176,12 @@ async function handleRequest(request, response, convert) {
     throw new HttpError(404, "NOT_FOUND", "Route not found.");
   }
   if (!isAllowedExtensionOrigin(origin)) {
-    throw new HttpError(403, "ORIGIN_NOT_ALLOWED", "Only the Manager Chrome extension is allowed.");
+    throw new HttpError(403, "ORIGIN_NOT_ALLOWED", "Only the RoleSave Chrome extension is allowed.");
   }
 
-  const metadata = parseMetadata(request.headers["x-manager-metadata"]);
+  const metadata = parseMetadata(request.headers["x-rolesave-metadata"]);
   const capture = await readCapture(request);
-  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "manager-converter-"));
+  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "rolesave-converter-"));
   const input = path.join(temporaryDirectory, "capture.mhtml");
   const output = path.join(temporaryDirectory, "job-description.pdf");
 
@@ -221,12 +221,12 @@ export async function startConversionServer({
 }
 
 async function main() {
-  const configuredPort = Number(process.env.MANAGER_CONVERTER_PORT || DEFAULT_PORT);
+  const configuredPort = Number(process.env.ROLESAVE_CONVERTER_PORT || DEFAULT_PORT);
   if (!Number.isInteger(configuredPort) || configuredPort < 1 || configuredPort > 65_535) {
-    throw new Error("MANAGER_CONVERTER_PORT must be an integer from 1 through 65535.");
+    throw new Error("ROLESAVE_CONVERTER_PORT must be an integer from 1 through 65535.");
   }
   const { server, origin } = await startConversionServer({ port: configuredPort });
-  console.log(`Manager PDF converter ready at ${origin}`);
+  console.log(`RoleSave PDF converter ready at ${origin}`);
   console.log("Keep this terminal open while using the extension. Press Ctrl+C to stop.");
 
   const stop = () => server.close(() => process.exit(0));

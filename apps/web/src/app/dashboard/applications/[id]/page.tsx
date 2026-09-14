@@ -1,27 +1,46 @@
 import Link from "next/link";
 import { ApplicationEditForm, DeleteApplicationForm, StatusForm } from "./application-edit-form";
 import { DocumentPanel } from "./document-panel";
+import { RelatedEmailsPanel } from "./related-emails-panel";
+import { DuplicateMergePanel } from "./duplicate-merge-panel";
 import { getApplicationDetail } from "@/lib/applications";
 import { formatDateTime, titleCase } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ApplicationDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ existing?: string }>;
+}) {
   const { id } = await params;
-  const { application, documents, events } = await getApplicationDetail(id);
-  const jobDescription = documents[0];
+  const query = await searchParams;
+  const { application, applicationOptions, document, events, relatedEmails } = await getApplicationDetail(id);
 
   return (
     <main className="main-content detail-page">
       <header className="detail-header">
         <div>
           <Link className="back-link" href="/dashboard">← All applications</Link>
-          <p className="eyebrow">{titleCase(application.source)} record</p>
+          <p className="eyebrow">Application</p>
           <h1>{application.company}</h1>
           <p className="intro">{application.position}</p>
         </div>
-        <span className="detail-status">{titleCase(application.status)}</span>
+        <div className="detail-badges">
+          <span className="detail-status">{titleCase(application.status)}</span>
+          <a className="detail-email-badge" href="#related-emails">
+            {relatedEmails.length} related email{relatedEmails.length === 1 ? "" : "s"}
+          </a>
+        </div>
       </header>
+
+      {query.existing === "1" && (
+        <div className="notice-banner" role="status">
+          This posting is already tracked, so RoleSave opened the existing application instead of creating a duplicate.
+        </div>
+      )}
 
       <section className="detail-grid">
         <div className="detail-main">
@@ -44,6 +63,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </ol>
             )}
           </article>
+
+          <RelatedEmailsPanel
+            applicationId={application.id}
+            applications={applicationOptions}
+            emails={relatedEmails}
+          />
         </div>
 
         <aside className="detail-aside">
@@ -51,7 +76,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <h2>Status</h2>
             <StatusForm application={application} />
           </article>
-          <DocumentPanel applicationId={application.id} document={jobDescription} />
+          <DocumentPanel applicationId={application.id} document={document} />
+          <DuplicateMergePanel applicationId={application.id} applications={applicationOptions} />
           <article className="panel side-panel facts">
             <h2>Record</h2>
             <dl>

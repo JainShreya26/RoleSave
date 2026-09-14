@@ -35,9 +35,10 @@ async function firstExistingPath(paths) {
 }
 
 export async function resolveChromePath(explicitPath) {
-  if (explicitPath) {
-    await fs.access(explicitPath);
-    return explicitPath;
+  const configuredPath = explicitPath || process.env.MHTML_CHROME_PATH;
+  if (configuredPath) {
+    await fs.access(configuredPath);
+    return configuredPath;
   }
 
   const detected = await firstExistingPath(DEFAULT_CHROME_PATHS);
@@ -63,6 +64,7 @@ export async function convertMhtmlToPdf({
   const executablePath = await resolveChromePath(chromePath);
   let temporaryDirectory;
   let browser;
+  let context;
 
   await fs.access(inputPath);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -72,7 +74,7 @@ export async function convertMhtmlToPdf({
   // captures that passed through text tooling deterministic as well.
   const source = await fs.readFile(inputPath, "utf8");
   const normalizedSource = source.replace(/\r?\n/g, "\r\n");
-  temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "manager-mhtml-"));
+  temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "rolesave-mhtml-"));
   const normalizedInputPath = path.join(temporaryDirectory, path.basename(inputPath));
   await fs.writeFile(normalizedInputPath, normalizedSource);
 
@@ -80,9 +82,25 @@ export async function convertMhtmlToPdf({
     browser = await chromium.launch({
       executablePath,
       headless: true,
-      args: ["--allow-file-access-from-files"],
+      args: [
+        "--disable-background-networking",
+        ...(process.env.MHTML_CONTAINERIZED === "1" ? ["--no-sandbox"] : []),
+      ],
     });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    context = await browser.newContext({
+      javaScriptEnabled: false,
+      serviceWorkers: "block",
+      viewport: { width: 1440, height: 1000 },
+    });
+    const page = await context.newPage();
+    await page.route("**/*", async (route) => {
+      const protocol = new URL(route.request().url()).protocol;
+      if (protocol === "file:" || protocol === "data:" || protocol === "blob:") {
+        await route.continue();
+        return;
+      }
+      await route.abort("blockedbyclient");
+    });
     await page.goto(pathToFileURL(normalizedInputPath).href, {
       waitUntil: "load",
       timeout: 30_000,
@@ -105,12 +123,12 @@ export async function convertMhtmlToPdf({
       for (const element of document.body.querySelectorAll("*")) {
         const position = window.getComputedStyle(element).position;
         if (position === "fixed" || position === "sticky") {
-          element.setAttribute("data-manager-print-chrome", "true");
+          element.setAttribute("data-rolesave-print-chrome", "true");
         }
       }
       const printCleanup = document.createElement("style");
       printCleanup.textContent = `
-        [data-manager-print-chrome="true"],
+        [data-rolesave-print-chrome="true"],
         [role="tooltip"],
         .google-material-icons[aria-hidden="true"],
         .material-icons[aria-hidden="true"],
@@ -141,6 +159,9 @@ export async function convertMhtmlToPdf({
       margin: { top: "0.55in", right: "0.45in", bottom: "0.5in", left: "0.45in" },
     });
   } finally {
+    if (context) {
+      await context.close();
+    }
     if (browser) {
       await browser.close();
     }

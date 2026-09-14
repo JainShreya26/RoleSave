@@ -46,10 +46,15 @@ export interface Database {
       applications: {
         Row: {
           applied_at: string | null;
+          ats_job_id: string | null;
+          ats_provider: string | null;
+          ats_tenant: string | null;
           company: string;
           company_normalized: string;
+          company_tokens: string[];
           created_at: string;
           id: string;
+          identity_key: string | null;
           job_id: string | null;
           original_domain: string | null;
           original_url: string | null;
@@ -62,10 +67,15 @@ export interface Database {
         };
         Insert: {
           applied_at?: string | null;
+          ats_job_id?: string | null;
+          ats_provider?: string | null;
+          ats_tenant?: string | null;
           company: string;
           company_normalized?: string;
+          company_tokens?: string[];
           created_at?: string;
           id?: string;
+          identity_key?: string | null;
           job_id?: string | null;
           original_domain?: string | null;
           original_url?: string | null;
@@ -87,6 +97,7 @@ export interface Database {
           completed_at: string | null;
           created_at: string;
           document_id: string;
+          failed_at: string | null;
           id: string;
           idempotency_key: string;
           last_error: string | null;
@@ -101,6 +112,7 @@ export interface Database {
           completed_at?: string | null;
           created_at?: string;
           document_id: string;
+          failed_at?: string | null;
           id?: string;
           idempotency_key: string;
           last_error?: string | null;
@@ -193,6 +205,7 @@ export interface Database {
       email_events: {
         Row: {
           application_id: string | null;
+          body_preview: string | null;
           classification: string;
           classification_confidence: number;
           created_at: string;
@@ -219,6 +232,7 @@ export interface Database {
         };
         Insert: {
           application_id?: string | null;
+          body_preview?: string | null;
           classification: string;
           classification_confidence: number;
           created_at?: string;
@@ -276,10 +290,12 @@ export interface Database {
           created_at: string;
           email_account_id: string;
           file_size_bytes: number | null;
+          failed_at: string | null;
           id: string;
           last_error: string | null;
           provider_message_id: string;
           status: Database["public"]["Enums"]["email_job_status"];
+          storage_deleted_at: string | null;
           storage_path: string;
           updated_at: string;
           user_id: string;
@@ -291,10 +307,12 @@ export interface Database {
           created_at?: string;
           email_account_id: string;
           file_size_bytes?: number | null;
+          failed_at?: string | null;
           id?: string;
           last_error?: string | null;
           provider_message_id: string;
           status?: Database["public"]["Enums"]["email_job_status"];
+          storage_deleted_at?: string | null;
           storage_path: string;
           updated_at?: string;
           user_id: string;
@@ -364,6 +382,10 @@ export interface Database {
         Args: { p_checksum_sha256: string; p_file_size_bytes: number; p_job_id: string };
         Returns: boolean;
       };
+      consume_webhook_rate_limit: {
+        Args: { p_maximum_requests: number; p_scope_key: string; p_window_seconds: number };
+        Returns: { allowed: boolean; retry_after_seconds: number }[];
+      };
       claim_inbound_email_job: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -402,11 +424,13 @@ export interface Database {
           p_captured_at: string;
           p_company: string;
           p_idempotency_key: string;
+          p_job_id?: string | null;
           p_original_url: string;
           p_position: string;
         };
         Returns: {
           application_id: string;
+          application_reused: boolean;
           capture_status: Database["public"]["Enums"]["capture_status"];
           document_id: string;
           job_id: string;
@@ -438,9 +462,24 @@ export interface Database {
         Args: { p_file_size_bytes: number; p_job_id: string };
         Returns: boolean;
       };
+      find_existing_application: {
+        Args: {
+          p_company: string;
+          p_job_id?: string | null;
+          p_original_url: string | null;
+        };
+        Returns: string | null;
+      };
       mark_application_applied: {
         Args: { p_application_id: string };
         Returns: boolean;
+      };
+      merge_duplicate_applications: {
+        Args: {
+          p_keep_application_id: string;
+          p_merge_application_id: string;
+        };
+        Returns: string;
       };
       issue_forwarding_address: {
         Args: { p_domain: string };
@@ -467,6 +506,10 @@ export interface Database {
         Args: { p_application_id: string; p_review_task_id: string };
         Returns: boolean;
       };
+      reassign_email_event_match: {
+        Args: { p_application_id: string; p_email_event_id: string };
+        Returns: boolean;
+      };
       set_email_review_suggestions: {
         Args: {
           p_email_event_id: string;
@@ -483,6 +526,26 @@ export interface Database {
       retry_failed_capture: {
         Args: { p_document_id: string };
         Returns: boolean;
+      };
+      retry_failed_email_job: {
+        Args: { p_job_id: string };
+        Returns: boolean;
+      };
+      restore_ignored_email_event: {
+        Args: { p_application_id: string; p_classification: string; p_email_event_id: string };
+        Returns: boolean;
+      };
+      undo_email_event_match: {
+        Args: { p_email_event_id: string };
+        Returns: boolean;
+      };
+      purge_expired_operational_data: {
+        Args: { p_failed_metadata_retention_days?: number; p_rate_limit_retention_days?: number };
+        Returns: {
+          capture_jobs_deleted: number;
+          email_jobs_deleted: number;
+          rate_limit_rows_deleted: number;
+        }[];
       };
     };
     Enums: {

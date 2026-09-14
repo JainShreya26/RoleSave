@@ -57,6 +57,18 @@ function parseDate(headers: Headers) {
     : new Date().toISOString();
 }
 
+/**
+ * mailparser folds List-Unsubscribe and its siblings into a single structured
+ * `list` header, so `headers.has("list-unsubscribe")` is false on every
+ * message including ones that carry the header. Reading the wrong key meant
+ * the unsubscribe penalty never applied to any email.
+ */
+function detectUnsubscribe(headers: Headers) {
+  const list = headers.get("list") as { unsubscribe?: unknown } | undefined;
+  if (list && typeof list === "object" && list.unsubscribe) return true;
+  return headers.has("list-unsubscribe");
+}
+
 function parseThreadId(headers: Headers): string | null {
   const references = headers.get("references");
   if (Array.isArray(references)) return references.find((value): value is string => typeof value === "string") ?? null;
@@ -76,7 +88,6 @@ export async function parseRawEmail(rawEmail: Buffer): Promise<ParsedEmail> {
   return new Promise((resolve, reject) => {
     const parser = new MailParser(options);
     let headers: Headers | null = null;
-    let keepBody = false;
     let metadataScore = 0;
     let bodyText = "";
     let links: string[] = [];
@@ -86,11 +97,11 @@ export async function parseRawEmail(rawEmail: Buffer): Promise<ParsedEmail> {
       const from = firstAddress(parsedHeaders.get("from"));
       const senderDomain = from.address?.split("@").at(-1) ?? null;
       metadataScore = scoreEmailMetadata({
-        hasUnsubscribe: parsedHeaders.has("list-unsubscribe"),
+        hasUnsubscribe: detectUnsubscribe(parsedHeaders),
+        senderAddress: from.address,
         senderDomain,
         subject: headerString(parsedHeaders, "subject") ?? "",
       });
-      keepBody = metadataScore >= 20;
     });
 
     parser.on("data", (part) => {
@@ -99,8 +110,6 @@ export async function parseRawEmail(rawEmail: Buffer): Promise<ParsedEmail> {
         part.content.resume();
         return;
       }
-      if (!keepBody) return;
-
       if (part.html) {
         const cleaned = cleanHtml(part.html);
         links = cleaned.links;
@@ -119,7 +128,7 @@ export async function parseRawEmail(rawEmail: Buffer): Promise<ParsedEmail> {
       const from = firstAddress(headers.get("from"));
       resolve({
         bodyText,
-        hasUnsubscribe: headers.has("list-unsubscribe"),
+        hasUnsubscribe: detectUnsubscribe(headers),
         links,
         messageId: headerString(headers, "message-id"),
         metadataScore,

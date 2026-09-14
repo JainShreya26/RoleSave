@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:ci .
+
+  database-authorization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm supabase:start
+      - run: pnpm exec supabase test db
+      - run: pnpm exec supabase status -o env > .supabase-ci.env
+      - name: Run cross-user API and storage tests
+        shell: bash
+        run: |
+          set -a
+          source .supabase-ci.env
+          set +a
+          SUPABASE_URL="$API_URL" \
+          SUPABASE_PUBLISHABLE_KEY="$ANON_KEY" \
+          SUPABASE_SECRET_KEY="$SERVICE_ROLE_KEY" \
+          pnpm test:authorization
+      - if: always()
+        continue-on-error: true
+        run: pnpm supabase:stop

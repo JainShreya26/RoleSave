@@ -4,9 +4,7 @@ import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { retryCaptureAction, type ApplicationActionState } from "../../actions";
 import { titleCase } from "@/lib/format";
-import type { DocumentRow } from "@/lib/supabase/database.types";
-
-type DocumentWithUrl = DocumentRow & { signed_url: string | null };
+import type { ApplicationDocumentItem } from "@/lib/applications";
 
 const initialState: ApplicationActionState = {};
 
@@ -15,7 +13,7 @@ export function DocumentPanel({
   document,
 }: {
   applicationId: string;
-  document?: DocumentWithUrl;
+  document?: ApplicationDocumentItem;
 }) {
   const router = useRouter();
   const retry = retryCaptureAction.bind(null, applicationId, document?.id ?? "");

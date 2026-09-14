@@ -1,5 +1,5 @@
 {
-  "name": "@manager/validation",
+  "name": "@rolesave/validation",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,11 +12,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@manager/types": "workspace:*",
+    "@rolesave/types": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@manager/config": "workspace:*",
+    "@rolesave/config": "workspace:*",
     "@types/node": "^24",
     "tsx": "^4",
     "typescript": "^5"

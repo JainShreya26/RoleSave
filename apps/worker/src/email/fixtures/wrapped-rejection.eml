@@ -1,0 +1,17 @@
+From: Acme Talent <careers@acme.example>
+To: candidate@example.com
+Subject: Update on your application
+Date: Mon, 31 Aug 2026 09:00:00 +0000
+Message-ID: <wrapped-rejection@acme.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hello,
+
+Thank you for your interest in Acme. After careful review of your
+application for requisition REQ-48391, we have decided to move forward
+with other candidates for this role.
+
+We wish you the best in your search.
+
+Acme Talent

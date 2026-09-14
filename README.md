@@ -34,7 +34,7 @@ packages/
   validation/  Shared input validation
 supabase/      Local configuration, migrations, and seed data
 spikes/        Isolated technical experiments
-docs/          Development notes and implementation roadmap
+docs/          Local development guide and reference documentation
 ```
 
 ## Technology
@@ -113,8 +113,6 @@ For detailed Supabase, inbound-email, Resend, and simulator instructions, see
 
 ## Documentation
 
-- [Product and technical specification](PROJECT_SPEC.md)
-- [Implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md)
 - [Local development guide](docs/LOCAL_DEVELOPMENT.md)
 
 ## Status

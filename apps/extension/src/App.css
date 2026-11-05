@@ -29,4 +29,14 @@ button:disabled { cursor:not-allowed; opacity:.6; }
 .pending-clear { width:100%; margin-top:9px; padding:7px; color:#7a8595; background:transparent; font-size:9px; }
 .message { margin:13px 0 0; color:#9b5e25; font-size:11px; line-height:1.45; text-align:center; }
 .message.success { color:#356b58; }
-.message.error { margin-top:160px; color:#a13f3f; }
+.message.error { color:#a13f3f; }
+.warning { margin:13px 0 0; padding:10px 11px; border:1px solid #f0dcb4; border-radius:9px; color:#7c5716; background:#fdf8ec; font-size:11px; line-height:1.45; }
+.link-button { display:block; width:100%; margin-top:12px; padding:7px; color:#3f6fbd; background:transparent; font-size:11px; }
+.pending-list { margin-top:20px; }
+.pending-list-title { margin:0 0 8px; color:#8b95a4; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.pending-list .page-card { padding:12px; }
+.pending-list .page-card + .page-card { margin-top:8px; }
+.pending-actions { display:flex; align-items:center; gap:10px; margin-top:9px; }
+.pending-actions .mark { padding:6px 10px; color:#172642; background:#eef1f5; }
+.pending-actions .mark:hover { background:#e2e7ed; }
+.pending-actions .dismiss { padding:6px 2px; color:#7a8595; background:transparent; }

@@ -4,18 +4,13 @@ import { applicationStatuses, type ApplicationStatus } from "@rolesave/types";
 import { notFound } from "next/navigation";
 import { requireViewer } from "@/lib/auth";
 import type { ApplicationEventRow, ApplicationRow, DocumentRow } from "@/lib/supabase/database.types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export interface ApplicationListItem extends ApplicationRow {
   document_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED" | null;
-  email_count: number;
-  latest_email: {
-    classification: string;
-    received_at: string;
-    subject: string;
-  } | null;
 }
 
-export interface ApplicationEmailOption {
+export interface ApplicationOption {
   appliedAt: string | null;
   company: string;
   createdAt: string;
@@ -26,13 +21,14 @@ export interface ApplicationEmailOption {
 
 export type ApplicationDetailItem = Pick<
   ApplicationRow,
-  "applied_at" | "company" | "created_at" | "id" | "job_id" | "original_url" | "position" | "status" | "updated_at"
+  "applied_at" | "company" | "created_at" | "id" | "job_id" | "original_url" | "position" | "status" | "triage_decision" | "triage_reason" | "updated_at"
 >;
 
 export interface ApplicationDocumentItem {
   capture_status: DocumentRow["capture_status"];
   id: string;
-  signed_url: string | null;
+  pdf_available: boolean;
+  saved_at: string;
 }
 
 export type ApplicationTimelineItem = Pick<
@@ -40,13 +36,8 @@ export type ApplicationTimelineItem = Pick<
   "event_time" | "event_type" | "evidence" | "id" | "new_status" | "source"
 >;
 
-export interface RelatedEmailItem {
-  classification: string;
-  evidence: string;
-  id: string;
-  receivedAt: string;
-  sender: string | null;
-  subject: string;
+function mostRecentlyUpdatedFirst(left: { updated_at: string }, right: { updated_at: string }) {
+  return Date.parse(right.updated_at) - Date.parse(left.updated_at);
 }
 
 function isApplicationStatus(value: string | undefined): value is ApplicationStatus {
@@ -55,33 +46,29 @@ function isApplicationStatus(value: string | undefined): value is ApplicationSta
 
 export async function listApplications(status?: string): Promise<ApplicationListItem[]> {
   const { supabase, viewer } = await requireViewer();
-  let query = supabase
-    .from("applications")
-    .select("*")
-    .eq("user_id", viewer.id)
-    .order("updated_at", { ascending: false });
-
-  if (isApplicationStatus(status)) {
-    query = query.eq("status", status);
-  }
-
-  const { data, error } = await query;
+  const { data, error } = await fetchAllRows((from, to) => {
+    let query = supabase.from("applications").select("*").eq("user_id", viewer.id);
+    if (isApplicationStatus(status)) {
+      query = query.eq("status", status);
+    }
+    return query.order("id").range(from, to);
+  });
   if (error) {
     throw new Error(`Unable to load applications: ${error.message}`);
   }
 
-  const applicationIds = data.map((application) => application.id);
   const documentStatus = new Map<string, ApplicationListItem["document_status"]>();
-  const emailCount = new Map<string, number>();
-  const latestEmail = new Map<string, NonNullable<ApplicationListItem["latest_email"]>>();
 
-  if (applicationIds.length > 0) {
-    const { data: documents, error: documentError } = await supabase
+  if (data.length > 0) {
+    // Read by user rather than listing every application ID: enough IDs make
+    // the request too long for the server, which is refused outright.
+    const { data: documents, error: documentError } = await fetchAllRows((from, to) => supabase
       .from("documents")
       .select("application_id,capture_status")
       .eq("user_id", viewer.id)
-      .in("application_id", applicationIds)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, to));
 
     if (documentError) {
       throw new Error(`Unable to load document states: ${documentError.message}`);
@@ -92,46 +79,26 @@ export async function listApplications(status?: string): Promise<ApplicationList
         documentStatus.set(document.application_id, document.capture_status);
       }
     });
-
-    const { data: emails, error: emailError } = await supabase
-      .from("email_events")
-      .select("application_id,classification,received_at,subject")
-      .eq("user_id", viewer.id)
-      .in("application_id", applicationIds)
-      .order("received_at", { ascending: false });
-    if (emailError) {
-      throw new Error(`Unable to load application email activity: ${emailError.message}`);
-    }
-    emails.forEach((email) => {
-      if (!email.application_id) return;
-      emailCount.set(email.application_id, (emailCount.get(email.application_id) ?? 0) + 1);
-      if (!latestEmail.has(email.application_id)) {
-        latestEmail.set(email.application_id, {
-          classification: email.classification,
-          received_at: email.received_at,
-          subject: email.subject,
-        });
-      }
-    });
   }
 
-  return data.map((application) => ({
-    ...application,
-    document_status: documentStatus.get(application.id) ?? null,
-    email_count: emailCount.get(application.id) ?? 0,
-    latest_email: latestEmail.get(application.id) ?? null,
-  }));
+  return data
+    .map((application) => ({
+      ...application,
+      triage_decision: application.triage_decision ?? null,
+      triage_reason: application.triage_reason ?? null,
+      document_status: documentStatus.get(application.id) ?? null,
+    }))
+    .sort(mostRecentlyUpdatedFirst);
 }
 
-export async function getApplicationDetail(id: string): Promise<{
+export async function getApplicationDetail(id: string, featuresAvailable = true): Promise<{
   application: ApplicationDetailItem;
-  applicationOptions: ApplicationEmailOption[];
-  document?: ApplicationDocumentItem;
+  applicationOptions: ApplicationOption[];
+  documents: ApplicationDocumentItem[];
   events: ApplicationTimelineItem[];
-  relatedEmails: RelatedEmailItem[];
 }> {
   const { supabase, viewer } = await requireViewer();
-  const { data: application, error } = await supabase
+  const { data: baseApplication, error } = await supabase
     .from("applications")
     .select("id,company,position,status,original_url,job_id,applied_at,created_at,updated_at")
     .eq("id", id)
@@ -141,79 +108,89 @@ export async function getApplicationDetail(id: string): Promise<{
   if (error) {
     throw new Error(`Unable to load the application: ${error.message}`);
   }
-  if (!application) {
+  if (!baseApplication) {
     notFound();
   }
 
-  const { data: events, error: eventsError } = await supabase
+  let triage: Pick<ApplicationDetailItem, "triage_decision" | "triage_reason"> = {
+    triage_decision: null,
+    triage_reason: null,
+  };
+  if (featuresAvailable) {
+    const { data, error: triageError } = await supabase
+      .from("applications")
+      .select("triage_decision,triage_reason")
+      .eq("id", id)
+      .eq("user_id", viewer.id)
+      .single();
+    if (triageError) throw new Error(`Unable to load the role decision: ${triageError.message}`);
+    triage = data;
+  }
+  const application: ApplicationDetailItem = { ...baseApplication, ...triage };
+
+  const { data: events, error: eventsError } = await fetchAllRows((from, to) => supabase
     .from("application_events")
     .select("id,event_type,event_time,source,evidence,new_status")
     .eq("application_id", id)
     .eq("user_id", viewer.id)
-    .order("event_time", { ascending: false });
+    .order("event_time", { ascending: false })
+    .order("id")
+    .range(from, to));
 
   if (eventsError) {
     throw new Error(`Unable to load the timeline: ${eventsError.message}`);
   }
 
-  const { data: emailRows, error: emailError } = await supabase
-    .from("email_events")
-    .select("id,classification,evidence,received_at,sender,subject")
-    .eq("application_id", id)
-    .eq("user_id", viewer.id)
-    .order("received_at", { ascending: false });
-  if (emailError) {
-    throw new Error(`Unable to load related emails: ${emailError.message}`);
-  }
-
-  const { data: applicationRows, error: applicationOptionsError } = await supabase
+  const { data: applicationRows, error: applicationOptionsError } = await fetchAllRows((from, to) => supabase
     .from("applications")
-    .select("id,company,position,status,applied_at,created_at")
+    .select("id,company,position,status,applied_at,created_at,updated_at")
     .eq("user_id", viewer.id)
-    .order("updated_at", { ascending: false });
+    .order("id")
+    .range(from, to));
   if (applicationOptionsError) {
     throw new Error(`Unable to load application choices: ${applicationOptionsError.message}`);
   }
 
-  const { data: documentRows, error: documentsError } = await supabase
+  // A merge can leave a role with several documents, newest first.
+  const { data: documentRows, error: documentsError } = await fetchAllRows((from, to) => supabase
     .from("documents")
-    .select("id,capture_status,storage_path")
+    .select("id,capture_status,storage_path,captured_at,created_at")
     .eq("application_id", id)
     .eq("user_id", viewer.id)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .order("id")
+    .range(from, to));
 
   if (documentsError) {
     throw new Error(`Unable to load job descriptions: ${documentsError.message}`);
   }
 
-  const latestDocument = documentRows[0];
-  let document: ApplicationDocumentItem | undefined;
-  if (latestDocument) {
-    if (latestDocument.capture_status !== "COMPLETE") {
-      document = {
-        capture_status: latestDocument.capture_status,
-        id: latestDocument.id,
-        signed_url: null,
-      };
-    } else {
-      const { data: signed, error: signedUrlError } = await supabase.storage
-        .from("job-descriptions")
-        .createSignedUrl(latestDocument.storage_path, 300);
-      if (signedUrlError) {
-        console.error(`Unable to sign document ${latestDocument.id}: ${signedUrlError.message}`);
-      }
-      document = {
-        capture_status: latestDocument.capture_status,
-        id: latestDocument.id,
-        signed_url: signed?.signedUrl ?? null,
-      };
+  // Signing shows whether each finished PDF can be opened. The page does not keep
+  // these links, because they expire. The document route signs a new one on each click.
+  const openablePaths = new Set<string>();
+  const completePaths = documentRows.filter((row) => row.capture_status === "COMPLETE").map((row) => row.storage_path);
+  if (completePaths.length > 0) {
+    const { data: signed, error: signedUrlError } = await supabase.storage
+      .from("job-descriptions")
+      .createSignedUrls(completePaths, 60);
+    if (signedUrlError) {
+      console.error(`Unable to check documents for application ${id}: ${signedUrlError.message}`);
+    }
+    for (const item of signed ?? []) {
+      if (item.path && item.signedUrl) openablePaths.add(item.path);
+      else console.error(`Unable to open a document for application ${id}: ${item.error}`);
     }
   }
+  const documents: ApplicationDocumentItem[] = documentRows.map((row) => ({
+    capture_status: row.capture_status,
+    id: row.id,
+    pdf_available: openablePaths.has(row.storage_path),
+    saved_at: row.captured_at ?? row.created_at,
+  }));
 
   return {
     application,
-    applicationOptions: applicationRows.map((row) => ({
+    applicationOptions: [...applicationRows].sort(mostRecentlyUpdatedFirst).map((row) => ({
       appliedAt: row.applied_at,
       company: row.company,
       createdAt: row.created_at,
@@ -221,15 +198,7 @@ export async function getApplicationDetail(id: string): Promise<{
       position: row.position,
       status: row.status,
     })),
-    document,
+    documents,
     events,
-    relatedEmails: emailRows.map((email) => ({
-      classification: email.classification,
-      evidence: email.evidence,
-      id: email.id,
-      receivedAt: email.received_at,
-      sender: email.sender,
-      subject: email.subject,
-    })),
   };
 }

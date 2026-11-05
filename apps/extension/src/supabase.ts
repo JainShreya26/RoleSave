@@ -26,3 +26,5 @@ export const supabase = createClient(supabaseUrl || "https://invalid.supabase.co
     storage,
   },
 });
+
+export const webAppUrl = import.meta.env.VITE_WEB_APP_URL as string;

@@ -28,6 +28,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+        env:
+          # Placeholders: this job only checks that the build succeeds and ships nothing.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
+          NEXT_PUBLIC_SITE_URL: https://ci-placeholder.example.com
       - run: docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:ci .
 
   database-authorization:
@@ -41,7 +46,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm supabase:start
-      - run: pnpm exec supabase test db supabase/tests/database/authorization.test.sql supabase/tests/database/email-status.test.sql
+      - run: pnpm exec supabase test db supabase/tests/database/authorization.test.sql supabase/tests/database/capture-flow.test.sql supabase/tests/database/merge-duplicates.test.sql
+      - name: Run duplicate-matching SQL tests
+        env:
+          # The tests create and drop their own database on this server.
+          PGHOST: 127.0.0.1
+          PGPORT: "54322"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: pnpm test:fingerprint
       - run: pnpm exec supabase status -o env > .supabase-ci.env
       - name: Run cross-user API and storage tests
         shell: bash

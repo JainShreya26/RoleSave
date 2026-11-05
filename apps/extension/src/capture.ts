@@ -1,25 +1,15 @@
-import { supabase } from "./supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { detectJobPage, type DetectedPage } from "./detect.ts";
 
-export interface PageMetadata {
-  company: string;
-  position: string;
+export interface PageMetadata extends DetectedPage {
+  tabId: number;
   url: string;
-  title: string;
-  jobId: string | null;
 }
-
-export interface PendingApplication {
-  applicationId: string;
-  company: string;
-  position: string;
-  savedAt: string;
-}
-
-const pendingApplicationKey = "rolesave.pendingApplication";
-const pendingApplicationLifetime = 7 * 24 * 60 * 60 * 1_000;
 
 interface CaptureSession {
+  application_company?: string;
   application_id: string;
+  application_position?: string;
   application_reused: boolean;
   capture_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
   document_id: string;
@@ -27,10 +17,28 @@ interface CaptureSession {
   temporary_storage_path: string;
 }
 
+export interface CaptureRequest {
+  company: string;
+  jobId: string | null;
+  position: string;
+  tabId: number;
+  url: string;
+}
+
 export interface CaptureResult {
   applicationId: string;
+  /** The saved record's name, which differs from the page if the application was reused. */
+  company: string;
+  position: string;
   reused: boolean;
 }
+
+export interface CaptureDependencies {
+  client: Pick<SupabaseClient, "rpc" | "storage">;
+  saveAsMhtml(tabId: number): Promise<Blob>;
+}
+
+export type MarkAppliedOutcome = "applied" | "later-stage" | "missing";
 
 function getActiveTab() {
   return chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
@@ -42,94 +50,18 @@ function getActiveTab() {
 
 export async function readPageMetadata(): Promise<PageMetadata> {
   const tab = await getActiveTab();
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => {
-      const candidates: Record<string, unknown>[] = [];
-      for (const script of document.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"]')) {
-        try {
-          const value: unknown = JSON.parse(script.textContent || "null");
-          const visit = (node: unknown) => {
-            if (!node || typeof node !== "object") return;
-            if (Array.isArray(node)) return node.forEach(visit);
-            const record = node as Record<string, unknown>;
-            const types = Array.isArray(record["@type"]) ? record["@type"] : [record["@type"]];
-            if (types.includes("JobPosting")) candidates.push(record);
-            if (Array.isArray(record["@graph"])) record["@graph"].forEach(visit);
-          };
-          visit(value);
-        } catch {
-          // Invalid JSON-LD should not prevent fallback detection.
-        }
-      }
-
-      const job = candidates[0];
-      const organization = job?.hiringOrganization;
-      const cleanText = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim() || "";
-      const parseGreenhouseTitle = (value: string) => {
-        const normalized = cleanText(value).replace(/^Job Application for\s+/i, "");
-        if (normalized === cleanText(value)) return null;
-        const separator = normalized.lastIndexOf(" at ");
-        if (separator < 1) return null;
-        const position = cleanText(normalized.slice(0, separator));
-        const company = cleanText(normalized.slice(separator + 4)).replace(/\s+[|–—-]\s+Greenhouse.*$/i, "");
-        return position && company ? { company, position } : null;
-      };
-      const socialTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content;
-      const greenhouseTitle = parseGreenhouseTitle(document.title) || parseGreenhouseTitle(socialTitle || "");
-      const explicitCompany = cleanText(
-        document.querySelector<HTMLElement>(
-          '[data-testid="company-name"], .company-name, .job__company, .job-company, [class*="company-name"]',
-        )?.innerText,
-      ).replace(/^at\s+/i, "");
-      const siteName = cleanText(document.querySelector<HTMLMetaElement>('meta[property="og:site_name"]')?.content);
-      const company =
-        organization && typeof organization === "object" && typeof (organization as Record<string, unknown>).name === "string"
-          ? String((organization as Record<string, unknown>).name)
-          : greenhouseTitle?.company ||
-            explicitCompany ||
-            cleanText(document.querySelector<HTMLElement>('[data-company], [class*="company"]')?.innerText) ||
-            (!/^greenhouse$/i.test(siteName) ? siteName : "") ||
-            location.hostname.replace(/^www\./, "");
-      const position =
-        (typeof job?.title === "string" ? job.title : "") ||
-        greenhouseTitle?.position ||
-        document.querySelector("h1")?.textContent?.trim() ||
-        document.title.split(/\s+[|–—]\s+|\s+-\s+/)[0]?.trim() ||
-        "Job posting";
-
-      // schema.org allows identifier to be a bare string, a PropertyValue, or
-      // an array of either. This is the employer's own requisition number and
-      // the strongest signal available for matching later email to this role.
-      const readIdentifier = (value: unknown): string | null => {
-        if (typeof value === "string" || typeof value === "number") {
-          return cleanText(String(value)) || null;
-        }
-        if (Array.isArray(value)) {
-          for (const entry of value) {
-            const found = readIdentifier(entry);
-            if (found) return found;
-          }
-          return null;
-        }
-        if (value && typeof value === "object") {
-          const record = value as Record<string, unknown>;
-          return readIdentifier(record.value ?? record.identifier ?? record.name);
-        }
-        return null;
-      };
-      const identifier = readIdentifier(job?.identifier);
-      const jobId = identifier && identifier.length <= 100 ? identifier : null;
-
-      return { company, position, title: document.title, jobId };
-    },
-  });
-
-  if (!result?.result) throw new Error("Could not read job metadata from this page.");
-  return { ...result.result, url: tab.url };
+  let detected: DetectedPage | undefined;
+  try {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: detectJobPage });
+    detected = result?.result;
+  } catch {
+    // Chrome refuses some pages, such as its web store and the PDF viewer.
+  }
+  if (!detected) throw new Error("RoleSave can't read this page. Open the job posting in a regular browser tab.");
+  return { ...detected, tabId: tab.id, url: tab.url };
 }
 
-function saveAsMhtml(tabId: number) {
+export function saveTabAsMhtml(tabId: number) {
   return new Promise<Blob>((resolve, reject) => {
     chrome.pageCapture.saveAsMHTML({ tabId }, (data) => {
       const error = chrome.runtime.lastError;
@@ -140,101 +72,76 @@ function saveAsMhtml(tabId: number) {
   });
 }
 
-export async function captureJob(metadata: PageMetadata, idempotencyKey: string): Promise<CaptureResult> {
-  const tab = await getActiveTab();
-  const { data, error } = await supabase.rpc("create_capture_session", {
+export async function captureJob(
+  request: CaptureRequest,
+  idempotencyKey: string,
+  { client, saveAsMhtml }: CaptureDependencies,
+): Promise<CaptureResult> {
+  // Capture first, because someone clicking Save may leave the page right after.
+  const archive = await saveAsMhtml(request.tabId);
+
+  const { data, error } = await client.rpc("create_capture_session", {
     p_captured_at: new Date().toISOString(),
-    p_company: metadata.company,
+    p_company: request.company,
     p_idempotency_key: idempotencyKey,
-    p_job_id: metadata.jobId,
-    p_original_url: metadata.url,
-    p_position: metadata.position,
+    p_job_id: request.jobId,
+    p_original_url: request.url,
+    p_position: request.position,
   });
 
   if (error) throw error;
   const session = (data as CaptureSession[] | null)?.[0];
   if (!session) throw new Error("The capture session could not be created.");
 
+  const result: CaptureResult = {
+    applicationId: session.application_id,
+    company: session.application_company ?? request.company,
+    position: session.application_position ?? request.position,
+    reused: session.application_reused,
+  };
+
   try {
-    const prepared = await supabase.rpc("retry_capture_upload", { p_job_id: session.job_id });
+    const prepared = await client.rpc("retry_capture_upload", { p_job_id: session.job_id });
     if (prepared.error) throw prepared.error;
-    if (!prepared.data) {
-      return { applicationId: session.application_id, reused: session.application_reused };
-    }
+    if (!prepared.data) return result;
 
-    if (session.capture_status === "FAILED") {
-      const removal = await supabase.storage.from("temporary-captures").remove([session.temporary_storage_path]);
-      if (removal.error) throw removal.error;
-    }
+    // An earlier attempt may have left a file, even if its response was lost,
+    // and the bucket refuses to overwrite one.
+    const removal = await client.storage.from("temporary-captures").remove([session.temporary_storage_path]);
+    if (removal.error) throw removal.error;
 
-    const archive = await saveAsMhtml(tab.id);
-    const upload = await supabase.storage.from("temporary-captures").upload(session.temporary_storage_path, archive, {
+    const upload = await client.storage.from("temporary-captures").upload(session.temporary_storage_path, archive, {
       cacheControl: "3600",
       contentType: "multipart/related",
       upsert: false,
     });
     if (upload.error) throw upload.error;
 
-    const finalized = await supabase.rpc("finalize_capture_upload", { p_job_id: session.job_id });
+    const finalized = await client.rpc("finalize_capture_upload", { p_job_id: session.job_id });
     if (finalized.error) throw finalized.error;
     if (!finalized.data) throw new Error("The uploaded capture could not be queued.");
   } catch (error) {
-    await supabase.rpc("fail_capture_upload", {
+    await client.rpc("fail_capture_upload", {
       p_error: error instanceof Error ? error.message : "Capture upload failed",
       p_job_id: session.job_id,
     });
     throw error;
   }
 
-  return { applicationId: session.application_id, reused: session.application_reused };
+  return result;
 }
 
-export async function markApplicationApplied(applicationId: string) {
-  const { data, error } = await supabase.rpc("mark_application_applied", {
+export async function markApplicationApplied(
+  applicationId: string,
+  client: Pick<SupabaseClient, "rpc" | "from">,
+): Promise<MarkAppliedOutcome> {
+  const { data, error } = await client.rpc("mark_application_applied", {
     p_application_id: applicationId,
   });
   if (error) throw error;
-  if (!data) {
-    throw new Error("This application is already in a later stage and was not changed.");
-  }
-}
+  if (data) return "applied";
 
-export async function rememberPendingApplication(
-  applicationId: string,
-  metadata: PageMetadata,
-): Promise<PendingApplication> {
-  const pending = {
-    applicationId,
-    company: metadata.company,
-    position: metadata.position,
-    savedAt: new Date().toISOString(),
-  };
-  await chrome.storage.local.set({ [pendingApplicationKey]: pending });
-  return pending;
-}
-
-export async function readPendingApplication(): Promise<PendingApplication | null> {
-  const stored = (await chrome.storage.local.get(pendingApplicationKey))[pendingApplicationKey] as unknown;
-  if (!stored || typeof stored !== "object") return null;
-  const pending = stored as Partial<PendingApplication>;
-  if (
-    typeof pending.applicationId !== "string" ||
-    typeof pending.company !== "string" ||
-    typeof pending.position !== "string" ||
-    typeof pending.savedAt !== "string"
-  ) {
-    await chrome.storage.local.remove(pendingApplicationKey);
-    return null;
-  }
-
-  const savedAt = new Date(pending.savedAt).valueOf();
-  if (!Number.isFinite(savedAt) || Date.now() - savedAt > pendingApplicationLifetime) {
-    await chrome.storage.local.remove(pendingApplicationKey);
-    return null;
-  }
-  return pending as PendingApplication;
-}
-
-export async function clearPendingApplication() {
-  await chrome.storage.local.remove(pendingApplicationKey);
+  const existing = await client.from("applications").select("id").eq("id", applicationId).maybeSingle();
+  if (existing.error) throw existing.error;
+  return existing.data ? "later-stage" : "missing";
 }

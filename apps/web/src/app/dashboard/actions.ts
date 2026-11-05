@@ -1,9 +1,10 @@
 "use server";
 
-import { applicationStatusSchema, createApplicationSchema } from "@rolesave/validation";
+import { createApplicationSchema, isUuid, selectableApplicationStatusSchema } from "@rolesave/validation";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireViewer } from "@/lib/auth";
+import { formatDateTime, titleCase } from "@/lib/format";
 
 export interface ApplicationActionState {
   errors?: Record<string, string[]>;
@@ -13,22 +14,26 @@ export interface ApplicationActionState {
 
 const emptyState: ApplicationActionState = {};
 
+const applicationNotFound = "Application not found or you do not have access.";
+
+const savedRoleDateError = {
+  appliedAt: ["A saved role hasn't been applied to yet. Clear this date or change the status."],
+};
+
+function sameMoment(left: string | null, right: string | null) {
+  return left === null || right === null ? left === right : Date.parse(left) === Date.parse(right);
+}
+
 function optionalString(value: FormDataEntryValue | null) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || null;
 }
 
-function optionalDateTime(value: FormDataEntryValue | null) {
-  const normalized = optionalString(value);
-  if (!normalized) return null;
-
-  const date = new Date(normalized);
-  return Number.isNaN(date.valueOf()) ? normalized : date.toISOString();
-}
-
 function parseApplicationForm(formData: FormData) {
   return createApplicationSchema.safeParse({
-    appliedAt: optionalDateTime(formData.get("appliedAt")),
+    // The browser sends an exact moment. A time with no zone would be read in the
+    // server's zone instead of the viewer's, so validation refuses it.
+    appliedAt: optionalString(formData.get("appliedAt")),
     company: formData.get("company"),
     jobId: optionalString(formData.get("jobId")),
     originalUrl: optionalString(formData.get("originalUrl")),
@@ -43,7 +48,7 @@ export async function createApplicationAction(
 ): Promise<ApplicationActionState> {
   void _previousState;
   const parsed = parseApplicationForm(formData);
-  const status = applicationStatusSchema.safeParse(formData.get("status"));
+  const status = selectableApplicationStatusSchema.safeParse(formData.get("status"));
 
   if (!parsed.success || !status.success) {
     return {
@@ -52,6 +57,10 @@ export async function createApplicationAction(
         ...(status.success ? {} : { status: ["Choose a valid status"] }),
       },
     };
+  }
+
+  if (status.data === "SAVED" && parsed.data.appliedAt) {
+    return { errors: savedRoleDateError };
   }
 
   const { supabase, viewer } = await requireViewer();
@@ -119,11 +128,12 @@ export async function createApplicationAction(
 }
 
 export async function mergeDuplicateApplicationAction(
-  keepApplicationId: string,
   _previousState: ApplicationActionState,
   formData: FormData,
 ): Promise<ApplicationActionState> {
   void _previousState;
+  const keepApplicationId = formData.get("applicationId");
+  if (!isUuid(keepApplicationId)) return { message: applicationNotFound };
   const mergeApplicationId = formData.get("mergeApplicationId");
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (typeof mergeApplicationId !== "string" || !uuidPattern.test(mergeApplicationId)) {
@@ -138,25 +148,27 @@ export async function mergeDuplicateApplicationAction(
     p_keep_application_id: keepApplicationId,
     p_merge_application_id: mergeApplicationId,
   });
+  if (error?.code === "23505") {
+    return { message: "Another tracked role already has this web address or job ID. Consolidate that role first." };
+  }
   if (error || !data) {
     return { message: error?.message ?? "The applications could not be consolidated." };
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/review");
-  revalidatePath("/dashboard/email/activity");
   revalidatePath(`/dashboard/applications/${keepApplicationId}`);
   return {
-    message: "Duplicate consolidated. Its PDFs, email matches, and timeline history were moved here.",
+    message: "Duplicate consolidated. Its PDFs, files, actions, and timeline were moved here.",
     success: true,
   };
 }
 
 export async function updateApplicationAction(
-  applicationId: string,
   _previousState: ApplicationActionState,
   formData: FormData,
 ): Promise<ApplicationActionState> {
+  const applicationId = formData.get("applicationId");
+  if (!isUuid(applicationId)) return { message: applicationNotFound };
   const parsed = parseApplicationForm(formData);
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };
@@ -165,13 +177,28 @@ export async function updateApplicationAction(
   const { supabase, viewer } = await requireViewer();
   const { data: application, error: ownershipError } = await supabase
     .from("applications")
-    .select("id,status")
+    .select("id,status,company,position,job_id,original_url,applied_at")
     .eq("id", applicationId)
     .eq("user_id", viewer.id)
     .maybeSingle();
 
   if (ownershipError || !application) {
-    return { message: "Application not found or you do not have access." };
+    return { message: applicationNotFound };
+  }
+
+  if (application.status === "SAVED" && parsed.data.appliedAt) {
+    return { errors: savedRoleDateError };
+  }
+
+  // Saving without changing anything is not an edit, so it adds nothing to the timeline.
+  if (
+    application.company === parsed.data.company
+    && application.position === parsed.data.position
+    && application.job_id === (parsed.data.jobId ?? null)
+    && application.original_url === (parsed.data.originalUrl ?? null)
+    && sameMoment(application.applied_at, parsed.data.appliedAt ?? null)
+  ) {
+    return { message: "No changes to save.", success: true };
   }
 
   const { error } = await supabase
@@ -186,6 +213,11 @@ export async function updateApplicationAction(
     .eq("id", applicationId)
     .eq("user_id", viewer.id);
 
+  if (error?.code === "23505") {
+    return {
+      message: "Another tracked role already has this web address or job ID. If it's the same job, consolidate the two under Duplicate application.",
+    };
+  }
   if (error) {
     return { message: error.message };
   }
@@ -211,11 +243,12 @@ export async function updateApplicationAction(
 }
 
 export async function changeStatusAction(
-  applicationId: string,
   _previousState: ApplicationActionState,
   formData: FormData,
 ): Promise<ApplicationActionState> {
-  const status = applicationStatusSchema.safeParse(formData.get("status"));
+  const applicationId = formData.get("applicationId");
+  if (!isUuid(applicationId)) return { message: applicationNotFound };
+  const status = selectableApplicationStatusSchema.safeParse(formData.get("status"));
   if (!status.success) {
     return { errors: { status: ["Choose a valid status"] } };
   }
@@ -229,7 +262,7 @@ export async function changeStatusAction(
     .maybeSingle();
 
   if (ownershipError || !application) {
-    return { message: "Application not found or you do not have access." };
+    return { message: applicationNotFound };
   }
 
   if (application.status === status.data) {
@@ -240,7 +273,7 @@ export async function changeStatusAction(
     .from("applications")
     .update({
       applied_at:
-        application.applied_at ?? (status.data === "SAVED" ? null : new Date().toISOString()),
+        status.data === "SAVED" ? null : application.applied_at ?? new Date().toISOString(),
       status: status.data,
     })
     .eq("id", applicationId)
@@ -253,8 +286,13 @@ export async function changeStatusAction(
   const { error: eventError } = await supabase.from("application_events").insert({
     application_id: applicationId,
     event_time: new Date().toISOString(),
-    event_type: "MANUAL_CORRECTION",
-    evidence: `Status changed manually from ${application.status} to ${status.data}`,
+    event_type: status.data === "WITHDRAWN" ? "APPLICATION_WITHDRAWN" : "MANUAL_CORRECTION",
+    // Going back to Saved clears the applied date, so keep it here in case that was a mistake.
+    evidence: `Status changed manually from ${titleCase(application.status)} to ${titleCase(status.data)}${
+      status.data === "SAVED" && application.applied_at
+        ? `. Applied date cleared (was ${formatDateTime(application.applied_at, undefined, "UTC")} UTC)`
+        : ""
+    }`,
     new_status: status.data,
     previous_status: application.status,
     source: "MANUAL",
@@ -284,6 +322,14 @@ export async function deleteApplicationAction(applicationId: string, _formData: 
   }
 
   const pdfPaths = documents.map((document) => document.storage_path);
+  const { data: attachments, error: attachmentsError } = await supabase
+    .from("application_attachments")
+    .select("storage_path")
+    .eq("application_id", applicationId)
+    .eq("user_id", viewer.id);
+  if (attachmentsError && attachmentsError.code !== "PGRST205" && attachmentsError.code !== "42P01") {
+    throw new Error(`Unable to inspect application files: ${attachmentsError.message}`);
+  }
   const temporaryPaths = documents.flatMap((document) =>
     document.temporary_storage_path ? [document.temporary_storage_path] : [],
   );
@@ -306,6 +352,15 @@ export async function deleteApplicationAction(applicationId: string, _formData: 
     }
   }
 
+  if (attachments && attachments.length > 0) {
+    const { error: attachmentError } = await supabase.storage
+      .from("application-attachments")
+      .remove(attachments.map((attachment) => attachment.storage_path));
+    if (attachmentError) {
+      throw new Error(`Unable to delete application files: ${attachmentError.message}`);
+    }
+  }
+
   const { error } = await supabase
     .from("applications")
     .delete()
@@ -321,13 +376,13 @@ export async function deleteApplicationAction(applicationId: string, _formData: 
 }
 
 export async function retryCaptureAction(
-  applicationId: string,
-  documentId: string,
   _previousState: ApplicationActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ApplicationActionState> {
   void _previousState;
-  void _formData;
+  const applicationId = formData.get("applicationId");
+  const documentId = formData.get("documentId");
+  if (!isUuid(applicationId) || !isUuid(documentId)) return { message: applicationNotFound };
   const { supabase } = await requireViewer();
   const { data, error } = await supabase.rpc("retry_failed_capture", {
     p_document_id: documentId,

@@ -1,13 +1,15 @@
 {
   "name": "@rolesave/extension",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:dev": "tsc -b && vite build --mode development",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test": "node --test src/detect.test.ts src/pending.test.ts src/saves.test.ts src/capture.test.ts",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
@@ -17,10 +19,12 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "jsdom": "^30.1.3",
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"

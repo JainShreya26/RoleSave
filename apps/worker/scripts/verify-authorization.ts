@@ -43,7 +43,8 @@ async function main() {
   const applicationIds: string[] = [];
   const documentIds: string[] = [];
   const captureJobIds: string[] = [];
-  const emailJobIds: string[] = [];
+  const actionIds: string[] = [];
+  const attachmentPaths: string[] = [];
 
   for (const [index, viewer] of viewers.entries()) {
     const application = await viewer.client
@@ -61,6 +62,32 @@ async function main() {
       .single();
     if (application.error) throw application.error;
     applicationIds.push(application.data.id);
+
+    const action = await viewer.client.from("application_actions").insert({
+      application_id: application.data.id,
+      user_id: viewer.id,
+      title: "Follow up",
+      due_at: new Date(Date.now() + 86_400_000).toISOString(),
+    }).select("id").single();
+    if (action.error) throw action.error;
+    actionIds.push(action.data.id);
+
+    const attachmentPath = `${viewer.id}/${randomUUID()}.pdf`;
+    const attachmentFile = Buffer.from("%PDF-1.4\nauthorization test\n");
+    const attachmentUpload = await viewer.client.storage.from("application-attachments")
+      .upload(attachmentPath, attachmentFile, { contentType: "application/pdf" });
+    if (attachmentUpload.error) throw attachmentUpload.error;
+    storageObjects.push({ bucket: "application-attachments", path: attachmentPath });
+    attachmentPaths.push(attachmentPath);
+    const attachment = await viewer.client.from("application_attachments").insert({
+      application_id: application.data.id,
+      user_id: viewer.id,
+      file_name: "resume.pdf",
+      mime_type: "application/pdf",
+      file_size_bytes: attachmentFile.byteLength,
+      storage_path: attachmentPath,
+    });
+    if (attachment.error) throw attachment.error;
 
     const temporaryPath = `${viewer.id}/authorization-test/${randomUUID()}.mhtml`;
     const outputPath = `${viewer.id}/authorization-test/${randomUUID()}.pdf`;
@@ -96,43 +123,22 @@ async function main() {
     });
     if (captureJob.error) throw captureJob.error;
     captureJobIds.push(captureJobId);
-
-    const account = await viewer.client.rpc("issue_forwarding_address", { p_domain: "example.test" });
-    if (account.error || !account.data?.[0]) throw account.error ?? new Error("Email account creation failed.");
-    const rawEmailPath = `${viewer.id}/${account.data[0].id}/${randomUUID()}.eml`;
-    const rawUpload = await admin.storage
-      .from("inbound-emails")
-      .upload(rawEmailPath, Buffer.from("From: test@example.test\r\nSubject: Authorization\r\n\r\nTest"), {
-        contentType: "message/rfc822",
-      });
-    if (rawUpload.error) throw rawUpload.error;
-    storageObjects.push({ bucket: "inbound-emails", path: rawEmailPath });
-
-    const emailJobId = randomUUID();
-    const emailJob = await admin.from("inbound_email_jobs").insert({
-      attempt_count: 3,
-      email_account_id: account.data[0].id,
-      id: emailJobId,
-      provider_message_id: `authorization-${randomUUID()}`,
-      status: "FAILED",
-      storage_path: rawEmailPath,
-      user_id: viewer.id,
-    });
-    if (emailJob.error) throw emailJob.error;
-    emailJobIds.push(emailJobId);
   }
 
-  const [applications, captures, emails] = await Promise.all([
+  const [applications, captures, actions, attachments] = await Promise.all([
     viewerA.client.from("applications").select("id"),
     viewerA.client.from("capture_jobs").select("id"),
-    viewerA.client.from("inbound_email_jobs").select("id"),
+    viewerA.client.from("application_actions").select("id"),
+    viewerA.client.from("application_attachments").select("storage_path"),
   ]);
   if (applications.error) throw applications.error;
   if (captures.error) throw captures.error;
-  if (emails.error) throw emails.error;
+  if (actions.error) throw actions.error;
+  if (attachments.error) throw attachments.error;
   assert.deepEqual(applications.data.map((row) => row.id), [applicationIds[0]]);
   assert.deepEqual(captures.data.map((row) => row.id), [captureJobIds[0]]);
-  assert.deepEqual(emails.data.map((row) => row.id), [emailJobIds[0]]);
+  assert.deepEqual(actions.data.map((row) => row.id), [actionIds[0]]);
+  assert.deepEqual(attachments.data.map((row) => row.storage_path), [attachmentPaths[0]]);
 
   const crossUpdate = await viewerA.client
     .from("applications")
@@ -142,26 +148,36 @@ async function main() {
   if (crossUpdate.error) throw crossUpdate.error;
   assert.equal(crossUpdate.data.length, 0);
 
+  const crossActionUpdate = await viewerA.client.from("application_actions")
+    .update({ title: "Unauthorized change" }).eq("id", actionIds[1]).select("id");
+  if (crossActionUpdate.error) throw crossActionUpdate.error;
+  assert.equal(crossActionUpdate.data.length, 0);
+
+  const crossActionInsert = await viewerA.client.from("application_actions").insert({
+    application_id: applicationIds[1],
+    user_id: viewerA.id,
+    title: "Unauthorized action",
+    due_at: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  assert.ok(crossActionInsert.error, "Cannot add an action to another user's role.");
+
   const crossStorageRead = await viewerA.client.storage
     .from("temporary-captures")
     .download(storageObjects[2].path);
   assert.ok(crossStorageRead.error, "Cross-user storage download should be denied.");
+  const crossAttachmentRead = await viewerA.client.storage
+    .from("application-attachments").download(attachmentPaths[1]);
+  assert.ok(crossAttachmentRead.error, "Cross-user application file download should be denied.");
 
   const crossCaptureReplay = await viewerA.client.rpc("retry_failed_capture", { p_document_id: documentIds[1] });
-  const crossEmailReplay = await viewerA.client.rpc("retry_failed_email_job", { p_job_id: emailJobIds[1] });
   if (crossCaptureReplay.error) throw crossCaptureReplay.error;
-  if (crossEmailReplay.error) throw crossEmailReplay.error;
   assert.equal(crossCaptureReplay.data, false);
-  assert.equal(crossEmailReplay.data, false);
 
   const ownCaptureReplay = await viewerA.client.rpc("retry_failed_capture", { p_document_id: documentIds[0] });
-  const ownEmailReplay = await viewerA.client.rpc("retry_failed_email_job", { p_job_id: emailJobIds[0] });
   if (ownCaptureReplay.error) throw ownCaptureReplay.error;
-  if (ownEmailReplay.error) throw ownEmailReplay.error;
   assert.equal(ownCaptureReplay.data, true);
-  assert.equal(ownEmailReplay.data, true);
 
-  console.log("Cross-user database, storage, and replay authorization tests passed.");
+  console.log("Cross-user application, action, file, storage, and replay authorization tests passed.");
 }
 
 try {

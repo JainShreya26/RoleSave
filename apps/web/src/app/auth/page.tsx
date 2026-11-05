@@ -1,3 +1,4 @@
+import { safeRedirectPath } from "@rolesave/validation";
 import { redirect } from "next/navigation";
 import { AuthForm } from "./auth-form";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -5,7 +6,12 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function AuthPage() {
+export default async function AuthPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; next?: string }>;
+}) {
+  const params = await searchParams;
   if (!isSupabaseConfigured()) {
     redirect("/");
   }
@@ -22,9 +28,12 @@ export default async function AuthPage() {
         <span className="brand auth-brand"><span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>RoleSave</span>
         <p className="eyebrow">Your private job-search record</p>
         <h1>Keep the details. Lose the spreadsheet.</h1>
-        <p>RoleSave brings applications, recruiting emails, and saved job descriptions into one clear timeline.</p>
+        <p>RoleSave brings applications and saved job descriptions into one clear timeline.</p>
       </section>
-      <AuthForm />
+      <AuthForm
+        linkError={params.error === "link"}
+        next={safeRedirectPath(params.next)}
+      />
     </main>
   );
 }

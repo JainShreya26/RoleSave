@@ -4,11 +4,10 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
+    "dev": "pnpm --parallel --no-bail --filter @rolesave/web --filter @rolesave/worker dev",
     "dev:extension": "pnpm --filter @rolesave/extension dev",
     "dev:web": "pnpm --filter @rolesave/web dev",
     "dev:worker": "pnpm --filter @rolesave/worker dev",
-    "email:flow": "pnpm --filter @rolesave/worker email-flow",
-    "email:process-once": "pnpm --filter @rolesave/worker start -- --once",
     "lint": "pnpm --recursive --if-present run lint",
     "mhtml:image:build": "docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:local .",
     "spike:mhtml:convert": "node spikes/mhtml-capture/scripts/convert.mjs",
@@ -21,7 +20,6 @@
     "supabase:stop": "supabase stop",
     "test": "pnpm --recursive --if-present run test",
     "test:authorization": "pnpm --filter @rolesave/worker test:authorization",
-    "test:cleanup": "bash scripts/test-cleanup-migration.sh",
     "test:fingerprint": "bash scripts/test-fingerprint.sh",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },

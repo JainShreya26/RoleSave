@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3100 -H 127.0.0.1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test src/lib/action-timing.test.ts src/lib/attachment-files.test.ts src/lib/auth-errors.test.ts src/lib/format.test.ts src/lib/supabase/fetch-all.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

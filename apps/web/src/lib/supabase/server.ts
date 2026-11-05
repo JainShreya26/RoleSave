@@ -2,7 +2,7 @@ import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getSupabaseEnvironment } from "./env";
+import { authCookieOptions, getSupabaseEnvironment } from "./env";
 import type { Database } from "./database.types";
 
 export async function createClient() {
@@ -10,6 +10,7 @@ export async function createClient() {
   const { key, url } = getSupabaseEnvironment();
 
   return createServerClient<Database>(url, key, {
+    cookieOptions: authCookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();

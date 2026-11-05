@@ -1,23 +1,15 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(14);
 
 select ok(
   has_table_privilege('service_role', 'public.capture_jobs', 'INSERT'),
   'service role can create capture jobs'
 );
 select ok(
-  has_table_privilege('service_role', 'public.inbound_email_jobs', 'INSERT'),
-  'service role can create inbound email jobs'
-);
-select ok(
   not has_table_privilege('authenticated', 'public.capture_jobs', 'INSERT'),
   'authenticated users cannot insert capture jobs directly'
-);
-select ok(
-  not has_table_privilege('authenticated', 'public.inbound_email_jobs', 'INSERT'),
-  'authenticated users cannot insert inbound email jobs directly'
 );
 
 insert into auth.users (
@@ -52,51 +44,19 @@ insert into public.capture_jobs (
   ('11300000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000001', '11200000-0000-4000-8000-000000000001', '11400000-0000-4000-8000-000000000001', 'FAILED', 3),
   ('22600000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', '22000000-0000-4000-8000-000000000002', '22400000-0000-4000-8000-000000000002', '22800000-0000-4000-8000-000000000002', 'FAILED', 3);
 
-insert into public.email_accounts (
-  id, user_id, provider, provider_account_id, email_address
+insert into public.application_actions (
+  id, application_id, user_id, title, due_at
 ) values
-  ('11500000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'FORWARDING', 'token-a', 'jobs+a@example.test'),
-  ('23000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'FORWARDING', 'token-b', 'jobs+b@example.test');
+  ('11500000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'Follow up A', now() + interval '1 day'),
+  ('22700000-0000-4000-8000-000000000002', '22000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'Follow up B', now() + interval '1 day');
 
-insert into public.inbound_email_jobs (
-  id, user_id, email_account_id, provider_message_id, storage_path, status, attempt_count
+insert into public.application_attachments (
+  id, application_id, user_id, file_name, mime_type, file_size_bytes, storage_path
 ) values
-  ('11600000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '11500000-0000-4000-8000-000000000001', 'message-a', 'a/message.eml', 'FAILED', 3),
-  ('23200000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', '23000000-0000-4000-8000-000000000002', 'message-b', 'b/message.eml', 'FAILED', 3);
-
-insert into public.email_events (
-  id, email_job_id, user_id, email_account_id, provider_message_id, subject,
-  received_at, classification, classification_confidence, metadata_score, evidence
-) values
-  ('11700000-0000-4000-8000-000000000001', '11600000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '11500000-0000-4000-8000-000000000001', 'message-a', 'A subject', now(), 'UNKNOWN_EMAIL_EVENT', 0.5, 1, 'A evidence'),
-  ('23400000-0000-4000-8000-000000000002', '23200000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', '23000000-0000-4000-8000-000000000002', 'message-b', 'B subject', now(), 'UNKNOWN_EMAIL_EVENT', 0.5, 1, 'B evidence');
-
-select ok(
-  public.set_email_review_suggestions(
-    '11700000-0000-4000-8000-000000000001',
-    array[
-      '11900000-0000-4000-8000-000000000009'::uuid,
-      '22000000-0000-4000-8000-000000000002'::uuid,
-      '11000000-0000-4000-8000-000000000001'::uuid,
-      '11900000-0000-4000-8000-000000000009'::uuid
-    ],
-    'Ranked suggestions',
-    0.5
-  ),
-  'service role can store review suggestions'
-);
-select is(
-  (
-    select suggested_application_ids
-    from public.review_tasks
-    where email_event_id = '11700000-0000-4000-8000-000000000001'
-  ),
-  array[
-    '11900000-0000-4000-8000-000000000009'::uuid,
-    '11000000-0000-4000-8000-000000000001'::uuid
-  ],
-  'review suggestions preserve ranking, remove duplicates, and exclude other users'
-);
+  ('11600000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'resume-a.pdf', 'application/pdf', 100,
+    '10000000-0000-4000-8000-000000000001/resume-a.pdf'),
+  ('22900000-0000-4000-8000-000000000002', '22000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'resume-b.pdf', 'application/pdf', 100,
+    '20000000-0000-4000-8000-000000000002/resume-b.pdf');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
@@ -106,59 +66,16 @@ select is((select count(*) from public.applications), 2::bigint, 'user A sees on
 select is((select count(*) from public.application_events), 1::bigint, 'user A sees only their timeline event');
 select is((select count(*) from public.documents), 1::bigint, 'user A sees only their document');
 select is((select count(*) from public.capture_jobs), 1::bigint, 'user A sees only their capture job');
-select is((select count(*) from public.email_accounts), 1::bigint, 'user A sees only their email account');
-select is((select count(*) from public.inbound_email_jobs), 1::bigint, 'user A sees only their inbound email job');
-select is((select count(*) from public.email_events), 1::bigint, 'user A sees only their email event');
-select is((select count(*) from public.review_tasks), 1::bigint, 'user A sees only their review task');
+select is((select count(*) from public.application_actions), 1::bigint, 'user A sees only their actions');
+select is((select count(*) from public.application_attachments), 1::bigint, 'user A sees only their application files');
 select is((select company from public.applications where id = '22000000-0000-4000-8000-000000000002'), null::text, 'user A cannot read user B application by id');
 select is(public.retry_failed_capture('22400000-0000-4000-8000-000000000002'), false, 'user A cannot replay user B capture');
-select is(public.retry_failed_email_job('23200000-0000-4000-8000-000000000002'), false, 'user A cannot replay user B email');
-select ok(
-  public.resolve_email_review_task(
-    (select id from public.review_tasks where email_event_id = '11700000-0000-4000-8000-000000000001'),
-    '11900000-0000-4000-8000-000000000009'
-  ),
-  'user A can resolve their email review'
-);
-select ok(
-  public.reassign_email_event_match(
-    '11700000-0000-4000-8000-000000000001',
-    '11000000-0000-4000-8000-000000000001'
-  ),
-  'user A can reassign their matched email'
-);
-select is(
-  (select application_id from public.email_events where id = '11700000-0000-4000-8000-000000000001'),
-  '11000000-0000-4000-8000-000000000001'::uuid,
-  'reassignment moves the email to the selected application'
-);
-select is(
-  public.reassign_email_event_match(
-    '11700000-0000-4000-8000-000000000001',
-    '22000000-0000-4000-8000-000000000002'
-  ),
-  false,
-  'user A cannot reassign an email to user B application'
-);
-select ok(
-  public.undo_email_event_match('11700000-0000-4000-8000-000000000001'),
-  'user A can undo their email match'
-);
-select is(
-  (select application_id from public.email_events where id = '11700000-0000-4000-8000-000000000001'),
-  null::uuid,
-  'undo detaches the email'
-);
-select is(
-  (select status::text from public.review_tasks where email_event_id = '11700000-0000-4000-8000-000000000001'),
-  'OPEN',
-  'undo reopens review'
-);
 
 select set_config('request.jwt.claim.sub', '20000000-0000-4000-8000-000000000002', true);
 select is((select count(*) from public.applications), 1::bigint, 'user B sees only their application');
 select is((select count(*) from public.capture_jobs), 1::bigint, 'user B sees only their capture job');
-select is((select count(*) from public.inbound_email_jobs), 1::bigint, 'user B sees only their inbound email job');
+select is((select count(*) from public.application_actions), 1::bigint, 'user B sees only their actions');
+select is((select count(*) from public.application_attachments), 1::bigint, 'user B sees only their application files');
 
 select * from finish();
 rollback;

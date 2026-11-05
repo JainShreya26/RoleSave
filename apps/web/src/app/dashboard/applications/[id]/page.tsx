@@ -1,10 +1,18 @@
+import { isUuid } from "@rolesave/validation";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ApplicationEditForm, DeleteApplicationForm, StatusForm } from "./application-edit-form";
 import { DocumentPanel } from "./document-panel";
-import { RelatedEmailsPanel } from "./related-emails-panel";
 import { DuplicateMergePanel } from "./duplicate-merge-panel";
+import { TriagePanel } from "./triage-panel";
+import { AttachmentPanel } from "./attachment-panel";
 import { getApplicationDetail } from "@/lib/applications";
-import { formatDateTime, titleCase } from "@/lib/format";
+import { listActionItems } from "@/lib/action-items";
+import { listAttachments } from "@/lib/attachments";
+import { jobSearchFeaturesAvailable } from "@/lib/job-search-features";
+import { ActionForm, ActionList } from "../../action-ui";
+import { LocalDate } from "../../local-date";
+import { eventTypeLabel, titleCase } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +24,14 @@ export default async function ApplicationDetailPage({
   searchParams: Promise<{ existing?: string }>;
 }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const query = await searchParams;
-  const { application, applicationOptions, document, events, relatedEmails } = await getApplicationDetail(id);
+  const featuresAvailable = await jobSearchFeaturesAvailable();
+  const [{ application, applicationOptions, documents, events }, actions, attachments] = await Promise.all([
+    getApplicationDetail(id, featuresAvailable),
+    featuresAvailable ? listActionItems(id) : Promise.resolve([]),
+    featuresAvailable ? listAttachments(id) : Promise.resolve([]),
+  ]);
 
   return (
     <main className="main-content detail-page">
@@ -30,9 +44,6 @@ export default async function ApplicationDetailPage({
         </div>
         <div className="detail-badges">
           <span className="detail-status">{titleCase(application.status)}</span>
-          <a className="detail-email-badge" href="#related-emails">
-            {relatedEmails.length} related email{relatedEmails.length === 1 ? "" : "s"}
-          </a>
         </div>
       </header>
 
@@ -41,6 +52,8 @@ export default async function ApplicationDetailPage({
           This posting is already tracked, so RoleSave opened the existing application instead of creating a duplicate.
         </div>
       )}
+
+      {!featuresAvailable && <div className="notice-banner" role="status">The database update for decisions, actions, and files is pending. You can still view and edit this role.</div>}
 
       <section className="detail-grid">
         <div className="detail-main">
@@ -56,39 +69,39 @@ export default async function ApplicationDetailPage({
                 {events.map((event) => (
                   <li key={event.id}>
                     <span className="timeline-dot" />
-                    <div><strong>{titleCase(event.event_type)}</strong><p>{event.evidence ?? "No evidence recorded"}</p><small>{formatDateTime(event.event_time)} · {titleCase(event.source)}</small></div>
+                    <div><strong>{eventTypeLabel(event.event_type)}</strong><p>{event.evidence ?? "No evidence recorded"}</p><small><LocalDate value={event.event_time} withTime /> · {titleCase(event.source)}</small></div>
                     {event.new_status && <span className="timeline-status">{titleCase(event.new_status)}</span>}
                   </li>
                 ))}
               </ol>
             )}
           </article>
-
-          <RelatedEmailsPanel
-            applicationId={application.id}
-            applications={applicationOptions}
-            emails={relatedEmails}
-          />
+          {featuresAvailable && <article className="panel role-actions-panel">
+            <div className="panel-heading"><div><h2>Next actions</h2><p>Plan the follow-ups and deadlines for this role.</p></div></div>
+            <div className="role-actions-content"><ActionList actions={actions} emptyMessage="No actions yet. Add the first one below." /><h3>Add an action</h3><ActionForm applicationId={application.id} /></div>
+          </article>}
         </div>
 
         <aside className="detail-aside">
+          {featuresAvailable && <TriagePanel application={application} />}
           <article className="panel side-panel">
             <h2>Status</h2>
             <StatusForm application={application} />
           </article>
-          <DocumentPanel applicationId={application.id} document={document} />
+          <DocumentPanel applicationId={application.id} documents={documents} />
+          {featuresAvailable && <AttachmentPanel applicationId={application.id} attachments={attachments} />}
           <DuplicateMergePanel applicationId={application.id} applications={applicationOptions} />
           <article className="panel side-panel facts">
             <h2>Record</h2>
             <dl>
-              <div><dt>Applied</dt><dd>{formatDateTime(application.applied_at)}</dd></div>
-              <div><dt>Created</dt><dd>{formatDateTime(application.created_at)}</dd></div>
-              <div><dt>Updated</dt><dd>{formatDateTime(application.updated_at)}</dd></div>
+              <div><dt>Applied</dt><dd><LocalDate value={application.applied_at} withTime /></dd></div>
+              <div><dt>Created</dt><dd><LocalDate value={application.created_at} withTime /></dd></div>
+              <div><dt>Updated</dt><dd><LocalDate value={application.updated_at} withTime /></dd></div>
               <div><dt>Job ID</dt><dd>{application.job_id ?? "Not recorded"}</dd></div>
             </dl>
             {application.original_url && <a className="secondary-button external-link" href={application.original_url} rel="noreferrer" target="_blank">Open original page ↗</a>}
           </article>
-          <article className="panel side-panel danger-zone"><h2>Danger zone</h2><p>Deleting permanently removes the timeline, temporary capture, and stored PDF.</p><DeleteApplicationForm applicationId={application.id} /></article>
+          <article className="panel side-panel danger-zone"><h2>Danger zone</h2><p>Deleting permanently removes the timeline, actions, files, temporary captures, and stored PDFs.</p><DeleteApplicationForm applicationId={application.id} /></article>
         </aside>
       </section>
     </main>

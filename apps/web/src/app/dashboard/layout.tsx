@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { DashboardNav } from "./dashboard-nav";
+import { LocalDatesScript } from "./local-date";
 import { requireViewer } from "@/lib/auth";
 
 function LogoMark() {
@@ -23,6 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </aside>
       {children}
+      <LocalDatesScript />
     </div>
   );
 }

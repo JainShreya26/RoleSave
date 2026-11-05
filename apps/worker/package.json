@@ -5,23 +5,18 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "dev": "tsx watch --env-file-if-exists=../web/.env.local src/index.ts",
-    "email-flow": "tsx --env-file-if-exists=../web/.env.local scripts/run-email-flow.ts",
+    "dev": "tsx watch --env-file-if-exists=../web/.env.local --env-file-if-exists=../web/.env.development.local src/index.ts",
     "start": "tsx --env-file-if-exists=../web/.env.local src/index.ts",
-    "test:authorization": "tsx --env-file-if-exists=../web/.env.local scripts/verify-authorization.ts",
-    "test": "tsx --test src/index.test.ts src/email/*.test.ts",
+    "test:authorization": "tsx --env-file-if-exists=../web/.env.local --env-file-if-exists=../web/.env.development.local scripts/verify-authorization.ts",
+    "test": "tsx --test src/index.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@rolesave/validation": "workspace:*",
-    "@supabase/supabase-js": "^2.112.3",
-    "cheerio": "^1.2.0",
-    "mailparser": "^3.9.26",
-    "resend": "^6.22.0"
+    "@supabase/supabase-js": "^2.112.3"
   },
   "devDependencies": {
     "@rolesave/config": "workspace:*",
-    "@types/mailparser": "^3.4.6",
     "@types/node": "^24",
     "tsx": "^4",
     "typescript": "^5"

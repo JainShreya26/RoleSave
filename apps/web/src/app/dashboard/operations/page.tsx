@@ -12,7 +12,7 @@ export default async function OperationsPage() {
         <div>
           <p className="eyebrow">Processing</p>
           <h1>Processing issues</h1>
-          <p className="intro">Retry email or PDF work that could not finish automatically.</p>
+          <p className="intro">Retry PDF work that could not finish automatically.</p>
         </div>
         <span className="review-count">{jobs.length} failed</span>
       </header>

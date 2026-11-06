@@ -1,13 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
-import { authenticate, type AuthActionState } from "./actions";
+import { authenticate, resendConfirmation, type AuthActionState } from "./actions";
 
 const initialState: AuthActionState = {};
 
-export function AuthForm() {
+export function AuthForm({ linkError = false, next = "/dashboard" }: { linkError?: boolean; next?: string }) {
   const [intent, setIntent] = useState<"sign-in" | "sign-up">("sign-in");
-  const [state, action, pending] = useActionState(authenticate, initialState);
+  // Controlled so the email survives the form reset after a failed attempt.
+  const [email, setEmail] = useState("");
+  const [authResult, action, pending] = useActionState(authenticate, initialState);
+  const [resendResult, resend, resending] = useActionState(resendConfirmation, initialState);
+  const [lastAction, setLastAction] = useState<"auth" | "resend" | null>(null);
+  // Results belong to the tab they came from, so switching tabs hides them.
+  const state = lastAction === "auth" ? authResult : lastAction === "resend" ? resendResult : initialState;
+  const showResend =
+    intent === "sign-in" && (linkError || lastAction === "resend" || (lastAction === "auth" && authResult.needsConfirmation));
+
+  function switchTo(tab: "sign-in" | "sign-up") {
+    setIntent(tab);
+    setLastAction(null);
+  }
 
   return (
     <div className="auth-card">
@@ -19,7 +33,7 @@ export function AuthForm() {
         <button
           aria-selected={intent === "sign-in"}
           className={intent === "sign-in" ? "active" : ""}
-          onClick={() => setIntent("sign-in")}
+          onClick={() => switchTo("sign-in")}
           role="tab"
           type="button"
         >
@@ -28,7 +42,7 @@ export function AuthForm() {
         <button
           aria-selected={intent === "sign-up"}
           className={intent === "sign-up" ? "active" : ""}
-          onClick={() => setIntent("sign-up")}
+          onClick={() => switchTo("sign-up")}
           role="tab"
           type="button"
         >
@@ -36,11 +50,30 @@ export function AuthForm() {
         </button>
       </div>
 
-      <form action={action} className="stack-form">
+      <form
+        action={action}
+        className="stack-form"
+        onSubmit={(event) => {
+          const submitter = (event.nativeEvent as SubmitEvent).submitter;
+          setLastAction(submitter?.dataset.action === "resend" ? "resend" : "auth");
+        }}
+      >
         <input name="intent" type="hidden" value={intent} />
+        <input name="next" type="hidden" value={next} />
+        {linkError && intent === "sign-in" && (
+          <p className="form-message error" role="alert">That link is invalid or has expired. Use the options below to get a new one.</p>
+        )}
         <label htmlFor="email">
           Email
-          <input autoComplete="email" id="email" name="email" required type="email" />
+          <input
+            autoComplete="email"
+            id="email"
+            name="email"
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            type="email"
+            value={email}
+          />
         </label>
         {state.errors?.email?.map((error) => <p className="field-error" key={error}>{error}</p>)}
 
@@ -57,6 +90,10 @@ export function AuthForm() {
         </label>
         {state.errors?.password?.map((error) => <p className="field-error" key={error}>{error}</p>)}
 
+        {intent === "sign-in" && (
+          <p className="form-message"><Link href="/auth/forgot-password">Forgot your password?</Link></p>
+        )}
+
         {state.message && (
           <p aria-live="polite" className={state.success ? "form-message success" : "form-message error"}>
             {state.message}
@@ -66,6 +103,19 @@ export function AuthForm() {
         <button className="primary-button auth-submit" disabled={pending} type="submit">
           {pending ? "Working…" : intent === "sign-up" ? "Create account" : "Sign in"}
         </button>
+
+        {showResend && (
+          <button
+            className="secondary-button"
+            data-action="resend"
+            disabled={resending}
+            formAction={resend}
+            formNoValidate
+            type="submit"
+          >
+            {resending ? "Sending…" : "Resend confirmation email"}
+          </button>
+        )}
       </form>
     </div>
   );

@@ -1,24 +1,22 @@
 "use client";
 
 import { useActionState } from "react";
-import { formatDateTime } from "@/lib/format";
 import type { FailedJobItem } from "@/lib/failed-jobs";
+import { LocalDate } from "../local-date";
 import { retryFailedJobAction, type RetryFailedJobActionState } from "./actions";
 
 const initialState: RetryFailedJobActionState = {};
 
 export function FailedJobCard({ job }: { job: FailedJobItem }) {
   const [state, action, pending] = useActionState(retryFailedJobAction, initialState);
-  const title = job.kind === "CAPTURE"
-    ? `${job.company ?? "Application"} — ${job.position ?? "job description"}`
-    : "Inbound email";
+  const title = `${job.company ?? "Application"} — ${job.position ?? "job description"}`;
 
   return (
     <article className="panel failed-job-card">
       <div>
         <div className="failed-job-heading">
-          <span className="status rose"><i />{job.kind === "CAPTURE" ? "PDF capture" : "Email processing"}</span>
-          <time>{formatDateTime(job.failedAt)}</time>
+          <span className="status rose"><i />PDF capture</span>
+          <LocalDate value={job.failedAt} withTime />
         </div>
         <h2>{title}</h2>
         <p className="failed-job-error">{job.lastError}</p>

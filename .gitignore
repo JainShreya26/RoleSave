@@ -10,6 +10,7 @@ coverage/
 !.env.example
 .supabase-ci.env
 supabase/.temp/
+supabase/.branches/
 
 # MHTML/PDF spike output can contain private job-page data.
 spikes/mhtml-capture/captures/*
@@ -18,3 +19,10 @@ spikes/mhtml-capture/output/*
 !spikes/mhtml-capture/output/.gitkeep
 
 .DS_Store
+
+# Local planning docs, not shipped documentation.
+docs/plan-*.md
+docs/DEPLOYMENT.md
+
+# Personal Claude Code settings.
+.claude/settings.local.json

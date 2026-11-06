@@ -5,8 +5,9 @@
 #
 #   pnpm test:fingerprint
 #
-# Requires a local PostgreSQL server (createdb/psql on PATH). The scratch
-# database is created fresh and dropped on exit, including on failure.
+# Requires a PostgreSQL server (createdb/psql on PATH), chosen with the usual
+# PGHOST and PGPORT variables. The scratch database is created fresh and dropped
+# on exit, including on failure.
 
 set -euo pipefail
 
@@ -14,13 +15,12 @@ DB="${FINGERPRINT_TEST_DB:-rolesave_fingerprint_test}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATIONS=(
   "$ROOT/supabase/migrations/20260825120000_application_fingerprint.sql"
-  "$ROOT/supabase/migrations/20260825130000_email_match_candidates.sql"
   "$ROOT/supabase/migrations/20260825140000_ats_board_families.sql"
   "$ROOT/supabase/migrations/20260825144000_application_deduplication.sql"
+  "$ROOT/supabase/migrations/20261104010000_posting_identity.sql"
 )
 TESTS=(
   "$ROOT/supabase/tests/local/fingerprint.test.sql"
-  "$ROOT/supabase/tests/local/match-candidates.test.sql"
   "$ROOT/supabase/tests/local/application-deduplication.test.sql"
 )
 
@@ -96,6 +96,8 @@ create table public.application_events (
   event_time timestamptz not null, source public.event_source not null,
   evidence text, previous_status public.application_status,
   new_status public.application_status, created_at timestamptz not null default now());
+-- The dedup migration under test predates the email removal and still reads
+-- these tables, so they exist here as stubs only.
 create table public.email_events (
   id uuid primary key default gen_random_uuid(), application_id uuid,
   user_id uuid not null);

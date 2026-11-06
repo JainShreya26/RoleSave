@@ -17,14 +17,12 @@ export async function retryFailedJobAction(
   void _previousState;
   const kind = formData.get("kind");
   const replayId = formData.get("replayId");
-  if ((kind !== "CAPTURE" && kind !== "EMAIL") || typeof replayId !== "string" || !uuidPattern.test(replayId)) {
+  if (kind !== "CAPTURE" || typeof replayId !== "string" || !uuidPattern.test(replayId)) {
     return { message: "The failed job could not be identified." };
   }
 
   const { supabase } = await requireViewer();
-  const result = kind === "CAPTURE"
-    ? await supabase.rpc("retry_failed_capture", { p_document_id: replayId })
-    : await supabase.rpc("retry_failed_email_job", { p_job_id: replayId });
+  const result = await supabase.rpc("retry_failed_capture", { p_document_id: replayId });
   if (result.error) return { message: `Unable to queue the retry: ${result.error.message}` };
   if (!result.data) {
     return { message: "This job is no longer replayable. Its source payload may have expired." };

@@ -20,7 +20,9 @@ export async function proxy(request: NextRequest) {
   const isAuthenticated = Boolean(claims?.sub);
 
   if (isProtected && !isAuthenticated) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+    const signIn = new URL("/auth", request.url);
+    signIn.searchParams.set("next", `${path}${request.nextUrl.search}`);
+    return NextResponse.redirect(signIn);
   }
 
   if (publicAuthPaths.has(path) && isAuthenticated) {

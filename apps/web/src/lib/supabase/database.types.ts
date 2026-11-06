@@ -3,6 +3,72 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      application_attachments: {
+        Row: {
+          id: string;
+          application_id: string;
+          user_id: string;
+          file_name: string;
+          mime_type: string;
+          file_size_bytes: number;
+          storage_path: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          application_id: string;
+          user_id: string;
+          file_name: string;
+          mime_type: string;
+          file_size_bytes: number;
+          storage_path: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["application_attachments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "application_attachments_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      application_actions: {
+        Row: {
+          application_id: string;
+          completed_at: string | null;
+          created_at: string;
+          due_at: string;
+          id: string;
+          remind_at: string | null;
+          title: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          application_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          due_at: string;
+          id?: string;
+          remind_at?: string | null;
+          title: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["application_actions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "application_actions_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       application_events: {
         Row: {
           application_id: string;
@@ -62,6 +128,8 @@ export interface Database {
           position_normalized: string;
           source: Database["public"]["Enums"]["application_source"];
           status: Database["public"]["Enums"]["application_status"];
+          triage_decision: "PURSUE" | "MAYBE" | "PASS" | null;
+          triage_reason: string | null;
           updated_at: string;
           user_id: string;
         };
@@ -83,6 +151,8 @@ export interface Database {
           position_normalized?: string;
           source: Database["public"]["Enums"]["application_source"];
           status: Database["public"]["Enums"]["application_status"];
+          triage_decision?: "PURSUE" | "MAYBE" | "PASS" | null;
+          triage_reason?: string | null;
           updated_at?: string;
           user_id: string;
         };
@@ -180,186 +250,6 @@ export interface Database {
           },
         ];
       };
-      email_accounts: {
-        Row: {
-          created_at: string;
-          email_address: string;
-          id: string;
-          provider: Database["public"]["Enums"]["email_provider"];
-          provider_account_id: string;
-          updated_at: string;
-          user_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          email_address: string;
-          id?: string;
-          provider: Database["public"]["Enums"]["email_provider"];
-          provider_account_id: string;
-          updated_at?: string;
-          user_id: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["email_accounts"]["Insert"]>;
-        Relationships: [];
-      };
-      email_events: {
-        Row: {
-          application_id: string | null;
-          body_preview: string | null;
-          classification: string;
-          classification_confidence: number;
-          created_at: string;
-          email_account_id: string;
-          email_job_id: string;
-          evidence: string;
-          extracted_company: string | null;
-          extracted_job_id: string | null;
-          extracted_position: string | null;
-          id: string;
-          meeting_url: string | null;
-          match_confidence: number | null;
-          message_id: string | null;
-          metadata_score: number;
-          provider_message_id: string;
-          received_at: string;
-          review_status: string;
-          sender: string | null;
-          sender_domain: string | null;
-          sender_name: string | null;
-          subject: string;
-          thread_id: string | null;
-          user_id: string;
-        };
-        Insert: {
-          application_id?: string | null;
-          body_preview?: string | null;
-          classification: string;
-          classification_confidence: number;
-          created_at?: string;
-          email_account_id: string;
-          email_job_id: string;
-          evidence: string;
-          extracted_company?: string | null;
-          extracted_job_id?: string | null;
-          extracted_position?: string | null;
-          id?: string;
-          meeting_url?: string | null;
-          match_confidence?: number | null;
-          message_id?: string | null;
-          metadata_score: number;
-          provider_message_id: string;
-          received_at: string;
-          review_status?: string;
-          sender?: string | null;
-          sender_domain?: string | null;
-          sender_name?: string | null;
-          subject: string;
-          thread_id?: string | null;
-          user_id: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["email_events"]["Insert"]>;
-        Relationships: [
-          {
-            foreignKeyName: "email_events_application_id_fkey";
-            columns: ["application_id"];
-            isOneToOne: false;
-            referencedRelation: "applications";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "email_events_email_account_id_fkey";
-            columns: ["email_account_id"];
-            isOneToOne: false;
-            referencedRelation: "email_accounts";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "email_events_email_job_id_fkey";
-            columns: ["email_job_id"];
-            isOneToOne: true;
-            referencedRelation: "inbound_email_jobs";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      inbound_email_jobs: {
-        Row: {
-          attempt_count: number;
-          available_at: string | null;
-          completed_at: string | null;
-          created_at: string;
-          email_account_id: string;
-          file_size_bytes: number | null;
-          failed_at: string | null;
-          id: string;
-          last_error: string | null;
-          provider_message_id: string;
-          status: Database["public"]["Enums"]["email_job_status"];
-          storage_deleted_at: string | null;
-          storage_path: string;
-          updated_at: string;
-          user_id: string;
-        };
-        Insert: {
-          attempt_count?: number;
-          available_at?: string | null;
-          completed_at?: string | null;
-          created_at?: string;
-          email_account_id: string;
-          file_size_bytes?: number | null;
-          failed_at?: string | null;
-          id?: string;
-          last_error?: string | null;
-          provider_message_id: string;
-          status?: Database["public"]["Enums"]["email_job_status"];
-          storage_deleted_at?: string | null;
-          storage_path: string;
-          updated_at?: string;
-          user_id: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["inbound_email_jobs"]["Insert"]>;
-        Relationships: [
-          {
-            foreignKeyName: "inbound_email_jobs_email_account_id_fkey";
-            columns: ["email_account_id"];
-            isOneToOne: false;
-            referencedRelation: "email_accounts";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      review_tasks: {
-        Row: {
-          created_at: string;
-          email_event_id: string;
-          id: string;
-          reason: string;
-          resolved_at: string | null;
-          status: string;
-          suggested_application_ids: string[];
-          user_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          email_event_id: string;
-          id?: string;
-          reason: string;
-          resolved_at?: string | null;
-          status?: string;
-          suggested_application_ids?: string[];
-          user_id: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["review_tasks"]["Insert"]>;
-        Relationships: [
-          {
-            foreignKeyName: "review_tasks_email_event_id_fkey";
-            columns: ["email_event_id"];
-            isOneToOne: true;
-            referencedRelation: "email_events";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -382,43 +272,6 @@ export interface Database {
         Args: { p_checksum_sha256: string; p_file_size_bytes: number; p_job_id: string };
         Returns: boolean;
       };
-      consume_webhook_rate_limit: {
-        Args: { p_maximum_requests: number; p_scope_key: string; p_window_seconds: number };
-        Returns: { allowed: boolean; retry_after_seconds: number }[];
-      };
-      claim_inbound_email_job: {
-        Args: Record<PropertyKey, never>;
-        Returns: {
-          email_account_id: string;
-          job_id: string;
-          provider_message_id: string;
-          storage_path: string;
-          user_id: string;
-        }[];
-      };
-      apply_automatic_email_match: {
-        Args: { p_application_id: string; p_email_event_id: string; p_match_confidence: number };
-        Returns: boolean;
-      };
-      complete_inbound_email_job: {
-        Args: {
-          p_classification: string;
-          p_classification_confidence: number;
-          p_evidence: string;
-          p_extracted_job_id: string | null;
-          p_job_id: string;
-          p_meeting_url: string | null;
-          p_message_id: string | null;
-          p_metadata_score: number;
-          p_received_at: string;
-          p_sender: string | null;
-          p_sender_domain: string | null;
-          p_sender_name: string | null;
-          p_subject: string;
-          p_thread_id: string | null;
-        };
-        Returns: boolean;
-      };
       create_capture_session: {
         Args: {
           p_captured_at: string;
@@ -429,7 +282,9 @@ export interface Database {
           p_position: string;
         };
         Returns: {
+          application_company: string;
           application_id: string;
+          application_position: string;
           application_reused: boolean;
           capture_status: Database["public"]["Enums"]["capture_status"];
           document_id: string;
@@ -448,18 +303,6 @@ export interface Database {
       };
       finalize_capture_upload: {
         Args: { p_job_id: string };
-        Returns: boolean;
-      };
-      fail_inbound_email_upload: {
-        Args: { p_error: string; p_job_id: string };
-        Returns: boolean;
-      };
-      fail_inbound_email_job: {
-        Args: { p_error: string; p_job_id: string };
-        Returns: boolean;
-      };
-      finalize_inbound_email_upload: {
-        Args: { p_file_size_bytes: number; p_job_id: string };
         Returns: boolean;
       };
       find_existing_application: {
@@ -481,44 +324,6 @@ export interface Database {
         };
         Returns: string;
       };
-      issue_forwarding_address: {
-        Args: { p_domain: string };
-        Returns: {
-          created_at: string;
-          email_address: string;
-          id: string;
-          provider: Database["public"]["Enums"]["email_provider"];
-        }[];
-      };
-      prepare_inbound_email_job: {
-        Args: { p_forwarding_token: string; p_provider_message_id: string };
-        Returns: {
-          already_queued: boolean;
-          job_id: string;
-          storage_path: string;
-        }[];
-      };
-      dismiss_email_review_task: {
-        Args: { p_review_task_id: string };
-        Returns: boolean;
-      };
-      resolve_email_review_task: {
-        Args: { p_application_id: string; p_review_task_id: string };
-        Returns: boolean;
-      };
-      reassign_email_event_match: {
-        Args: { p_application_id: string; p_email_event_id: string };
-        Returns: boolean;
-      };
-      set_email_review_suggestions: {
-        Args: {
-          p_email_event_id: string;
-          p_match_confidence: number;
-          p_reason: string;
-          p_suggested_application_ids: string[];
-        };
-        Returns: boolean;
-      };
       retry_capture_upload: {
         Args: { p_job_id: string };
         Returns: boolean;
@@ -527,43 +332,19 @@ export interface Database {
         Args: { p_document_id: string };
         Returns: boolean;
       };
-      retry_failed_email_job: {
-        Args: { p_job_id: string };
-        Returns: boolean;
-      };
-      restore_ignored_email_event: {
-        Args: { p_application_id: string; p_classification: string; p_email_event_id: string };
-        Returns: boolean;
-      };
-      undo_email_event_match: {
-        Args: { p_email_event_id: string };
-        Returns: boolean;
-      };
       purge_expired_operational_data: {
-        Args: { p_failed_metadata_retention_days?: number; p_rate_limit_retention_days?: number };
-        Returns: {
-          capture_jobs_deleted: number;
-          email_jobs_deleted: number;
-          rate_limit_rows_deleted: number;
-        }[];
+        Args: { p_failed_metadata_retention_days?: number };
+        Returns: { capture_jobs_deleted: number }[];
       };
     };
     Enums: {
       application_event_type:
         | "JD_SAVED"
         | "MARKED_AS_APPLIED"
-        | "APPLICATION_CONFIRMED"
-        | "ASSESSMENT_REQUESTED"
-        | "INTERVIEW_REQUESTED"
-        | "INTERVIEW_SCHEDULED"
-        | "INTERVIEW_RESCHEDULED"
-        | "OFFER_RECEIVED"
-        | "REJECTION_RECEIVED"
         | "APPLICATION_WITHDRAWN"
         | "GENERAL_UPDATE"
-        | "MANUAL_CORRECTION"
-        | "UNKNOWN_EMAIL_EVENT";
-      application_source: "EXTENSION" | "EMAIL" | "MANUAL";
+        | "MANUAL_CORRECTION";
+      application_source: "EXTENSION" | "MANUAL";
       application_status:
         | "SAVED"
         | "APPLIED"
@@ -574,9 +355,7 @@ export interface Database {
         | "WITHDRAWN"
         | "NEEDS_REVIEW";
       capture_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
-      email_job_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
-      email_provider: "FORWARDING" | "GMAIL" | "OUTLOOK";
-      event_source: "EXTENSION" | "EMAIL" | "MANUAL" | "SYSTEM";
+      event_source: "EXTENSION" | "MANUAL" | "SYSTEM";
     };
     CompositeTypes: Record<string, never>;
   };

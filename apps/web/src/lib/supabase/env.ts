@@ -3,6 +3,9 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Production is served over HTTPS, so the session cookie must never travel over HTTP.
+export const authCookieOptions = { secure: process.env.NODE_ENV === "production" };
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabaseKey);
 }

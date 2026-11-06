@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { LandingPage } from "./landing-page";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,7 +9,10 @@ export default async function Home() {
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
-    redirect(data?.claims?.sub ? "/dashboard" : "/auth");
+    if (data?.claims?.sub) {
+      redirect("/dashboard");
+    }
+    return <LandingPage />;
   }
 
   return (

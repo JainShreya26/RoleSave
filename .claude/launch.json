@@ -4,9 +4,9 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@rolesave/web", "dev"],
-      "port": 3000,
-      "url": "http://127.0.0.1:3000"
+      "runtimeArgs": ["--filter", "@rolesave/web", "exec", "next", "dev", "-p", "3100", "-H", "127.0.0.1"],
+      "port": 3100,
+      "url": "http://127.0.0.1:3100"
     }
   ]
 }

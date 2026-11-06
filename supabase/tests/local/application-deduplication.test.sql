@@ -72,12 +72,9 @@ begin
     application_id, user_id, event_type, event_time, source, evidence,
     previous_status, new_status
   ) values (
-    v_other_id, auth.uid(), 'INTERVIEW_REQUESTED', now(), 'EMAIL',
-    'Interview email', 'APPLIED', 'INTERVIEW'
+    v_other_id, auth.uid(), 'GENERAL_UPDATE', now(), 'MANUAL',
+    'Interview note', 'APPLIED', 'INTERVIEW'
   );
-  insert into public.email_events (application_id, user_id) values (v_other_id, auth.uid());
-  insert into public.review_tasks (user_id, suggested_application_ids)
-  values (auth.uid(), array[v_other_id, v_first.application_id]);
 
   perform public.merge_duplicate_applications(v_first.application_id, v_other_id);
 
@@ -87,18 +84,59 @@ begin
   if (select status from public.applications where id = v_first.application_id) <> 'INTERVIEW' then
     raise exception '  FAIL  furthest status was not preserved';
   end if;
-  if not exists (select 1 from public.email_events where application_id = v_first.application_id)
-    or not exists (
-      select 1 from public.application_events
-      where application_id = v_first.application_id and evidence = 'Interview email'
-    )
+  if not exists (
+    select 1 from public.application_events
+    where application_id = v_first.application_id and evidence = 'Interview note'
+  )
   then
     raise exception '  FAIL  dependent evidence was not moved';
   end if;
-  if (select suggested_application_ids from public.review_tasks limit 1)
-    is distinct from array[v_first.application_id]
-  then
-    raise exception '  FAIL  review suggestions were not rewritten/deduplicated';
+
+  raise notice '  all cases passed';
+end $$;
+
+-- Which URLs and job IDs count as the same posting.
+do $$
+declare
+  v_case record;
+  v_first text;
+  v_second text;
+  v_failed integer := 0;
+begin
+  raise notice 'posting identity';
+
+  for v_case in
+    select * from (values
+      -- Different jobs must stay apart. A false duplicate loses the job.
+      (false, 'query ID',            'https://careers.acme.com/job?id=1', 'Acme', null, 'https://careers.acme.com/job?id=2', 'Acme', null),
+      (false, 'ref holding job ID',  'https://careers.acme.com/job?ref=JR1', 'Acme', null, 'https://careers.acme.com/job?ref=JR2', 'Acme', null),
+      (false, 'hash route',          'https://careers.acme.com/#/jobs/1', 'Acme', null, 'https://careers.acme.com/#/jobs/2', 'Acme', null),
+      (false, 'LinkedIn search job', 'https://www.linkedin.com/jobs/search/?currentJobId=111&keywords=x', 'Acme', null, 'https://www.linkedin.com/jobs/search/?currentJobId=222&keywords=x', 'Beta', null),
+      (false, 'Indeed search job',   'https://www.indeed.com/jobs?q=x&vjk=aaa', 'Acme', null, 'https://www.indeed.com/jobs?q=x&vjk=bbb', 'Beta', null),
+      (false, 'two job IDs',         'https://careers.acme.com/job', 'Acme', 'REQ-1', 'https://careers.acme.com/job', 'Acme', 'REQ-2'),
+      (false, 'same ID, employers',  'https://acme.com/job', 'Acme', 'REQ-1', 'https://beta.com/job', 'Beta', 'REQ-1'),
+      (false, 'shared label as ID',  'https://careers.acme.com/jobs/1', 'Acme', 'engineering', 'https://careers.acme.com/jobs/2', 'Acme', 'engineering'),
+      -- The same job must still match.
+      (true,  'tracking parameters', 'https://careers.acme.com/jobs/1?utm_source=a&gclid=b', 'Acme', null, 'https://www.careers.acme.com/jobs/1/', 'Acme', null),
+      (true,  'attribution ref',     'https://careers.acme.com/jobs/1?ref=linkedin', 'Acme', null, 'https://careers.acme.com/jobs/1?ref=indeed', 'Acme', null),
+      (true,  'parameter order',     'https://careers.acme.com/job?id=1&team=2', 'Acme', null, 'https://careers.acme.com/job?team=2&id=1', 'Acme', null),
+      (true,  'scroll fragment',     'https://careers.acme.com/jobs/1#apply', 'Acme', null, 'https://careers.acme.com/jobs/1', 'Acme', null),
+      (true,  'job ID, two URLs',    'https://acme.com/careers/data-engineer', 'Acme', 'REQ-1', 'https://jobs.acme.com/r/REQ-1', 'Acme', 'REQ-1'),
+      (true,  'LinkedIn view pages', 'https://www.linkedin.com/jobs/view/senior-engineer-at-acme-4012345678/', 'Acme', null, 'https://www.linkedin.com/jobs/search/?currentJobId=4012345678&keywords=x', 'Acme', null),
+      (true,  'Indeed view pages',   'https://www.indeed.com/viewjob?jk=abc123&from=serp', 'Acme', null, 'https://uk.indeed.com/jobs?q=x&vjk=abc123', 'Acme', null),
+      (true,  'ATS outranks job ID', 'https://jobs.lever.co/acme/6ed76ce8-4156-4b60-b120-403538bd66cd', 'Acme', 'REQ-1', 'https://jobs.lever.co/acme/6ed76ce8-4156-4b60-b120-403538bd66cd/apply', 'Acme Inc', null)
+    ) as cases(same, label, url_a, company_a, id_a, url_b, company_b, id_b)
+  loop
+    v_first := public.application_identity_key(v_case.url_a, v_case.company_a, v_case.id_a);
+    v_second := public.application_identity_key(v_case.url_b, v_case.company_b, v_case.id_b);
+    if v_first is null or v_second is null or (v_first = v_second) <> v_case.same then
+      raise warning '  FAIL  %: % and % (expected same = %)', v_case.label, v_first, v_second, v_case.same;
+      v_failed := v_failed + 1;
+    end if;
+  end loop;
+
+  if v_failed > 0 then
+    raise exception 'posting identity: % failing case(s)', v_failed;
   end if;
 
   raise notice '  all cases passed';

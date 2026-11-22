@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useId, useState } from "react";
+import { useFormStatus } from "react-dom";
 import type { ActionItem } from "@/lib/action-items";
-import { actionTiming, type ActionTiming } from "@/lib/action-timing";
+import { actionsChangedEvent, actionTiming, type ActionTiming } from "@/lib/action-timing";
 import type { ApplicationActionState } from "./actions";
 import { createActionItem, deleteActionItem, setActionCompletion, updateActionItem } from "./action-item-actions";
+import { ConfirmDialog } from "./confirm-dialog";
 
 const initialState: ApplicationActionState = {};
 // Needs attention sits above the roles table, so it must not push it far down.
 const compactLimit = 5;
 type ReminderChoice = "NONE" | "AT_DUE" | "ONE_DAY" | "THREE_DAYS" | "CUSTOM";
-type ActionBucket = ActionTiming | "paused" | "completed";
+type ActionBucket = ActionTiming | "completed";
 
 function localInputParts(value: string) {
   const date = new Date(value);
@@ -29,7 +31,6 @@ function localDateTime(day: string, time: string) {
 
 function classifyAction(item: ActionItem, now: Date): ActionBucket {
   if (item.completed_at) return "completed";
-  if (item.roleStatus === "SAVED" && item.triageDecision === "PASS") return "paused";
   return actionTiming(item, now);
 }
 
@@ -67,10 +68,13 @@ export function ActionForm({ applicationId, existing, onDone }: {
     }
   }
 
-  // A saved edit closes its form. The row itself shows the result.
+  // A saved action closes its form. The row itself shows the result, and the
+  // sidebar recounts what needs attention.
   useEffect(() => {
-    if (state.success && existing) onDone?.();
-  }, [existing, onDone, state]);
+    if (!state.success) return;
+    window.dispatchEvent(new Event(actionsChangedEvent));
+    onDone?.();
+  }, [onDone, state]);
 
   const dueDate = localDateTime(dueDay, dueTime);
   let reminderDate: Date | null = null;
@@ -95,12 +99,12 @@ export function ActionForm({ applicationId, existing, onDone }: {
       <datalist id={suggestionsId}><option value="Finish application" /><option value="Follow up on application" /><option value="Prepare for interview" /><option value="Send thank-you note" /></datalist>
       <div className="action-date-grid">
         <label>Due date<input name="dueDay" onChange={(event) => setDueDay(event.target.value)} required type="date" value={dueDay} /></label>
-        <label>Time (optional)<input name="dueTime" onChange={(event) => setDueTime(event.target.value)} type="time" value={dueTime} /></label>
+        <label><span>Time <small className="field-optional">optional</small></span><input name="dueTime" onChange={(event) => setDueTime(event.target.value)} type="time" value={dueTime} /></label>
       </div>
-      <small className="action-help">If time is blank, use 9:00 AM in your local time zone.</small>
-      <label>Show in-app reminder
+      <small className="action-help">With no time, the action is due at 9:00 AM your time.</small>
+      <label>Remind me
         <select onChange={(event) => setReminder(event.target.value as ReminderChoice)} value={reminder}>
-          <option value="NONE">At due date only</option>
+          <option value="NONE">On the due date only</option>
           <option value="AT_DUE">At due time</option>
           <option value="ONE_DAY">1 day before</option>
           <option value="THREE_DAYS">3 days before</option>
@@ -109,31 +113,47 @@ export function ActionForm({ applicationId, existing, onDone }: {
       </label>
       {reminder === "CUSTOM" && <div className="action-date-grid">
         <label>Reminder date<input onChange={(event) => setCustomDay(event.target.value)} required type="date" value={customDay} /></label>
-        <label>Time (optional)<input onChange={(event) => setCustomTime(event.target.value)} type="time" value={customTime} /></label>
+        <label><span>Time <small className="field-optional">optional</small></span><input onChange={(event) => setCustomTime(event.target.value)} type="time" value={customTime} /></label>
       </div>}
       {reminderInvalid && <p className="field-error">Choose a reminder no later than the due time.</p>}
       <input name="dueAt" type="hidden" value={dueDate?.toISOString() ?? ""} />
       <input name="remindAt" type="hidden" value={reminderDate?.toISOString() ?? ""} />
       {state.message && <p aria-live="polite" className={`form-message ${state.success ? "success" : "error"}`}>{state.message}</p>}
       <div className="form-actions">
-        {onDone && <button className="secondary-button" onClick={onDone} type="button">Cancel</button>}
+        {/* These sit at the left, under the fields, so the main button comes first. */}
         <button className="primary-button" disabled={pending || !dueDate || reminderInvalid} type="submit">
           {pending ? "Saving…" : existing ? "Save action" : "Add action"}
         </button>
+        {onDone && <button className="secondary-button" onClick={onDone} type="button">Cancel</button>}
       </div>
     </form>
   );
 }
 
-function ActionRow({ item, bucket, editable }: { item: ActionItem; bucket: ActionBucket; editable: boolean }) {
+// Ticks as soon as it is clicked, so the row doesn't look unchanged while the server catches up.
+function ActionCheck({ item }: { item: ActionItem }) {
+  const { pending } = useFormStatus();
+  return <button
+    aria-busy={pending}
+    aria-label={item.completed_at ? `Reopen ${item.title}` : `Complete ${item.title}`}
+    className={`action-check ${pending ? "pending" : ""}`}
+    type="submit"
+  >{Boolean(item.completed_at) !== pending ? "✓" : ""}</button>;
+}
+
+function ActionRow({ item, bucket, editable, showRole }: { item: ActionItem; bucket: ActionBucket; editable: boolean; showRole: boolean }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   return <li className={`action-row ${bucket}`}>
-    <form action={setActionCompletion.bind(null, item.id, !item.completed_at)}>
-      <button aria-label={item.completed_at ? `Reopen ${item.title}` : `Complete ${item.title}`} className="action-check" type="submit">{item.completed_at ? "✓" : ""}</button>
+    <form action={async (formData) => {
+      await setActionCompletion(item.id, !item.completed_at, formData);
+      window.dispatchEvent(new Event(actionsChangedEvent));
+    }}>
+      <ActionCheck item={item} />
     </form>
     <div className="action-row-body">
       <strong>{item.title}</strong>
-      <Link href={`/dashboard/applications/${item.application_id}`}>{item.company} · {item.position}</Link>
+      {showRole && <Link href={`/dashboard/applications/${item.application_id}`}>{item.company} · {item.position}</Link>}
       <small suppressHydrationWarning>{formatDue(item.due_at)}</small>
       {editing && <ActionForm applicationId={item.application_id} existing={item} onDone={() => setEditing(false)} />}
     </div>
@@ -141,18 +161,30 @@ function ActionRow({ item, bucket, editable }: { item: ActionItem; bucket: Actio
       {bucket !== "upcoming" && bucket !== "completed" && <span className={`action-tag ${bucket}`}>{bucket === "reminder" ? "Reminder" : bucket}</span>}
       {editable && <>
         <button className="text-button" onClick={() => setEditing((value) => !value)} type="button">Edit</button>
-        <form action={deleteActionItem.bind(null, item.id)} onSubmit={(event) => {
-          if (!window.confirm(`Delete “${item.title}”?`)) event.preventDefault();
-        }}><button className="text-button" type="submit">Delete</button></form>
+        <button className="text-button" onClick={() => setConfirmingDelete(true)} type="button">Delete</button>
+        {confirmingDelete && <ConfirmDialog
+          action={async (formData) => {
+            await deleteActionItem(item.id, formData);
+            window.dispatchEvent(new Event(actionsChangedEvent));
+          }}
+          confirmLabel="Delete action"
+          description="This permanently removes this action from the role."
+          items={[{ detail: `${item.company} · ${item.position}`, name: item.title }]}
+          listLabel="Action selected for deletion"
+          onClose={() => setConfirmingDelete(false)}
+          title="Delete this action?"
+        />}
       </>}
     </div>
   </li>;
 }
 
-export function ActionList({ actions, compact = false, emptyMessage = "No actions yet. Open a role to add one." }: {
+export function ActionList({ actions, compact = false, emptyMessage = "No actions yet. Open a role to add one.", showRole = true }: {
   actions: ActionItem[];
   compact?: boolean;
   emptyMessage?: string;
+  /** Off on a role's own page, where naming the role on every row only repeats the heading. */
+  showRole?: boolean;
 }) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -160,14 +192,14 @@ export function ActionList({ actions, compact = false, emptyMessage = "No action
     const interval = window.setInterval(() => setNow(new Date()), 30_000);
     return () => { window.clearTimeout(first); window.clearInterval(interval); };
   }, []);
-  if (!now) return <p className="action-loading">Loading actions…</p>;
+  // The compact list holds its place while it loads, so the roles table below does not jump.
+  if (!now) return <p className="action-loading" style={compact ? { minHeight: Math.min(actions.length, compactLimit) * 44 + 4 } : undefined}>Loading actions…</p>;
 
   const groups: { key: ActionBucket; title: string }[] = [
     { key: "overdue", title: "Overdue" },
     { key: "reminder", title: "Reminders" },
     { key: "today", title: "Due today" },
     { key: "upcoming", title: "Upcoming" },
-    { key: "paused", title: "Paused for passed roles" },
     { key: "completed", title: "Completed" },
   ];
   const visible = compact ? groups.filter((group) => ["overdue", "reminder", "today"].includes(group.key)) : groups;
@@ -184,14 +216,39 @@ export function ActionList({ actions, compact = false, emptyMessage = "No action
     return { ...group, shown, total: items.length };
   });
 
-  return <div className="action-groups">
+  return <div className={`action-groups ${compact ? "compact" : ""}`}>
     {sections.map((group) => {
       if (group.shown.length === 0) return null;
+      const rows = <ul>{group.shown.map((item) => <ActionRow bucket={group.key} editable={!compact} item={item} key={item.id} showRole={showRole} />)}</ul>;
+      // Finished work stays a click away, so what is still open is what the eye meets first.
+      if (group.key === "completed") {
+        return <details className="action-group" key={group.key}>
+          <summary><h3>{group.title} <span>{group.total}</span></h3></summary>
+          {rows}
+        </details>;
+      }
       return <section className="action-group" key={group.key}>
         <h3>{group.title} <span>{group.total}</span></h3>
-        <ul>{group.shown.map((item) => <ActionRow bucket={group.key} editable={!compact} item={item} key={item.id} />)}</ul>
+        {rows}
       </section>;
     })}
     {compact && count > compactLimit && <Link className="text-link action-more" href="/dashboard/actions">View all {count} actions that need attention →</Link>}
   </div>;
+}
+
+/** A role's actions. The form to add one stays out of the way until it is wanted. */
+export function RoleActions({ actions, applicationId }: { actions: ActionItem[]; applicationId: string }) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <article className="panel role-actions-panel">
+      <div className="panel-heading">
+        <div><h2>Next actions</h2><p>Follow-ups and deadlines for this role.</p></div>
+        {!adding && <button className="secondary-button" onClick={() => setAdding(true)} type="button"><span aria-hidden="true">+</span> Add action</button>}
+      </div>
+      <div className="role-actions-content">
+        {adding && <ActionForm applicationId={applicationId} onDone={() => setAdding(false)} />}
+        <ActionList actions={actions} emptyMessage="No actions yet. Add a follow-up or a deadline to keep this role moving." showRole={false} />
+      </div>
+    </article>
+  );
 }

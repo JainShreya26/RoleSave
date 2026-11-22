@@ -102,6 +102,53 @@ begin
        'breezy', 'acme', 'abc123-data-scientist'),
       ('https://acme.recruitee.com/o/data-scientist',
        'recruitee', 'acme', 'data-scientist'),
+      -- Workday's requisition ID follows the title, whatever comes after it.
+      -- The segment before the title is a location, which many jobs share.
+      ('https://acme.wd5.myworkdayjobs.com/en-US/External/job/New-York-NY/Software-Engineer_R1234/apply',
+       'workday', 'acme', 'r1234'),
+      ('https://acme.wd5.myworkdayjobs.com/en-US/External/job/New-York-NY/Software-Engineer_R1234/apply/applyManually',
+       'workday', 'acme', 'r1234'),
+      ('https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234/',
+       'workday', 'acme', 'r1234'),
+      ('https://acme.wd5.myworkdayjobs.com/en-US/External/details/Software-Engineer_R1234',
+       'workday', 'acme', 'r1234'),
+      ('https://acme.wd5.myworkdayjobs.com/Careers_2/job/Remote/Software-Engineer_R1234/apply',
+       'workday', 'acme', 'r1234'),
+      -- With no requisition ID, a location or site name must not stand in for one.
+      ('https://acme.wd5.myworkdayjobs.com/External/job/New-York-NY/Software-Engineer',
+       'workday', 'acme', null),
+      ('https://acme.wd5.myworkdayjobs.com/Careers_2/job/Remote/Software-Engineer',
+       'workday', 'acme', null),
+      -- Greenhouse's embedded form names the employer and job in its query.
+      ('https://boards.greenhouse.io/embed/job_app?for=Acme&token=1111111',
+       'greenhouse', 'acme', '1111111'),
+      ('https://boards.greenhouse.io/embed/job_app?token=1111111',
+       'greenhouse', null, '1111111'),
+      ('https://boards.greenhouse.io/embed/job_board?for=acme',
+       'greenhouse', 'acme', null),
+      -- SmartRecruiters' one-click form names them in its path.
+      ('https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/aaaaaaaa-1111-4111-8111-111111111111?dcr_ci=x',
+       'smartrecruiters', 'acme', 'aaaaaaaa-1111-4111-8111-111111111111'),
+      ('https://jobs.smartrecruiters.com/oneclick-ui/other',
+       'smartrecruiters', null, null),
+      -- An ID is a whole path segment. A file name is not one, and neither is
+      -- part of a segment.
+      ('https://acme.bamboohr.com/jobs/view.php?id=11',
+       'bamboohr', 'acme', null),
+      ('https://careers-acme.icims.com/jobs/284419/level_3/job',
+       'icims', 'careers-acme', '284419'),
+      -- A vendor route word is not a posting.
+      ('https://careers-acme.icims.com/jobs/search?ss=1',
+       'icims', 'careers-acme', null),
+      ('https://boards.greenhouse.io/acme/departments/4',
+       'greenhouse', 'acme', null),
+      ('https://jobs.ashbyhq.com/acme/embed?version=2',
+       'ashby', 'acme', null),
+      ('https://job-boards.greenhouse.io/acme/jobs',
+       'greenhouse', 'acme', null),
+      -- The route noun is a whole segment, so it cannot bite the front off an ID.
+      ('https://jobs.lever.co/acme/product-manager',
+       'lever', 'acme', 'product-manager'),
       -- A board host whose first segment is a vendor route word names no
       -- employer, and null beats reporting the route word as one. The posting
       -- ID after it is still real and is kept.

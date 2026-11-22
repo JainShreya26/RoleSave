@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applicationActionSchema, authCredentialsSchema, captureMetadataSchema, isUuid, newPasswordSchema, selectableApplicationStatusSchema, safeRedirectPath, safeRedirectPathFromLink, createApplicationSchema, triageSchema } from "./index";
+import { applicationActionSchema, authCredentialsSchema, captureMetadataSchema, isUuid, newPasswordSchema, selectableApplicationStatusSchema, safeRedirectPath, safeRedirectPathFromLink, createApplicationSchema } from "./index";
 
 test("a person cannot choose the legacy review status", () => {
   assert.equal(selectableApplicationStatusSchema.safeParse("WITHDRAWN").success, true);
@@ -58,9 +58,16 @@ test("reminder time cannot come after its action is due", () => {
   assert.equal(result.success, false);
 });
 
-test("saved-role decisions have a bounded reason", () => {
-  assert.equal(triageSchema.safeParse({ decision: "PURSUE", reason: "Good fit" }).success, true);
-  assert.equal(triageSchema.safeParse({ decision: "PASS", reason: "x".repeat(501) }).success, false);
+test("orders reminders by time across offsets and fractional precision", () => {
+  const reminder = (remindAt: string, dueAt = "2026-11-05T15:00:00Z") =>
+    applicationActionSchema.safeParse({ title: "Follow up", dueAt, remindAt });
+
+  assert.deepEqual(reminder("2026-11-05T09:30:00-06:00").error?.flatten().fieldErrors.remindAt, [
+    "Reminder must be before the action is due",
+  ]);
+  assert.equal(reminder("2026-11-05T18:00:00+04:00").success, true);
+  assert.equal(reminder("2026-11-05T10:00:00.000000-05:00").success, true);
+  assert.equal(reminder("2026-11-05T15:00:00.000002Z", "2026-11-05T15:00:00.000001Z").success, false);
 });
 
 test("application errors say what to fix", () => {

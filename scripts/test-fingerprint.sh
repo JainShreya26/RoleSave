@@ -18,6 +18,10 @@ MIGRATIONS=(
   "$ROOT/supabase/migrations/20260825140000_ats_board_families.sql"
   "$ROOT/supabase/migrations/20260825144000_application_deduplication.sql"
   "$ROOT/supabase/migrations/20261104010000_posting_identity.sql"
+  "$ROOT/supabase/migrations/20261105010000_capture_recovery.sql"
+  "$ROOT/supabase/migrations/20261105020000_match_same_posting_url.sql"
+  "$ROOT/supabase/migrations/20261105080000_posting_identity_url_parsing.sql"
+  "$ROOT/supabase/migrations/20261105090000_preserve_posting_url_case.sql"
 )
 TESTS=(
   "$ROOT/supabase/tests/local/fingerprint.test.sql"
@@ -45,6 +49,9 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" >/dev/null <<'BOOT'
 -- Roles are cluster-wide rather than per-database, so a repeat run finds
 -- them already present.
 do $roles$ begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon;
+  end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated;
   end if;
@@ -109,6 +116,11 @@ create function public.normalize_application_fields() returns trigger
 create trigger applications_normalize_before_write
   before insert or update of company, position, original_url
   on public.applications for each row execute function public.normalize_application_fields();
+create function public.set_updated_at() returns trigger
+  language plpgsql as $$ begin new.updated_at := now(); return new; end; $$;
+create trigger applications_set_updated_at
+  before update on public.applications
+  for each row execute function public.set_updated_at();
 create function public.create_capture_session(text,text,text,timestamptz,uuid)
   returns void language sql as $$ select $$;
 create function auth.uid() returns uuid language sql stable as $$

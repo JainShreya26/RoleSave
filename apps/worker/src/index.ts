@@ -17,7 +17,7 @@ import {
 const executeFile = promisify(execFile);
 const converterScript = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../spikes/mhtml-capture/scripts/convert.mjs",
+  "../../converter/src/convert.mjs",
 );
 const defaultConverterImage = "rolesave-mhtml-converter:local";
 
@@ -103,6 +103,7 @@ export async function processCaptureJob(input: unknown, dependencies: CaptureWor
 
 interface ClaimedJobRow {
   application_id: string;
+  attempt_id: string;
   captured_at: string;
   company: string;
   document_id: string;
@@ -116,34 +117,115 @@ interface ClaimedJobRow {
 
 interface StoredPayloadRow {
   id: string;
-  storage_path?: string;
-  temporary_storage_path?: string;
+  user_id: string;
+  temporary_storage_path: string;
 }
 
-interface FailedCaptureRow {
-  document_id: string;
+type CaptureBucket = "temporary-captures" | "job-descriptions";
+
+interface RetiredPayloadRow {
   id: string;
+  document_id: string;
+  user_id: string;
+  bucket_id: CaptureBucket;
+  storage_path: string;
 }
 
-function retentionDays(name: string, fallback: number, minimum: number) {
+function retentionDays(name: string, fallback: number, minimum: number, maximum = Number.MAX_SAFE_INTEGER) {
   const configured = Number(process.env[name]);
-  return Number.isInteger(configured) && configured >= minimum ? configured : fallback;
+  return Number.isInteger(configured) && configured >= minimum && configured <= maximum ? configured : fallback;
+}
+
+function errorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return String(error);
+}
+
+/** A claimed job whose data the worker refuses to process. Retrying cannot fix it. */
+export class InvalidCaptureJobError extends Error {
+  override name = "InvalidCaptureJobError";
+}
+
+/** What the owner sees when a save fails, and whether another attempt could help. */
+export interface CaptureFailure {
+  message: string;
+  retryable: boolean;
+}
+
+// Matches UNREADABLE_PAGE_EXIT_CODE in the converter.
+const unreadablePageExitCode = 3;
+// Docker and Podman exit with these when they cannot start the container at all.
+const containerRuntimeExitCodes = new Set([125, 126, 127]);
+
+/**
+ * Turns a failure into a message for the person who saved the job. The full
+ * error, which can include the converter command and server paths, only goes
+ * to the worker's own log.
+ */
+export function describeCaptureFailure(error: unknown): CaptureFailure {
+  if (error instanceof InvalidCaptureJobError) {
+    return { message: "This save is incomplete and cannot become a PDF. Save the job again from its page.", retryable: false };
+  }
+  const failure = (error && typeof error === "object" ? error : {}) as {
+    code?: unknown; killed?: unknown; signal?: unknown; syscall?: unknown;
+  };
+  if (failure.code === unreadablePageExitCode) {
+    return {
+      message: "The saved page had no readable text, so no PDF was made. Open the posting, let it finish loading, then save it again.",
+      retryable: false,
+    };
+  }
+  if (failure.killed === true || failure.signal === "SIGKILL") {
+    return { message: "Making the PDF took too long.", retryable: true };
+  }
+  const couldNotStart = typeof failure.syscall === "string" && failure.syscall.startsWith("spawn");
+  if (couldNotStart || (typeof failure.code === "number" && containerRuntimeExitCodes.has(failure.code))) {
+    return { message: "The PDF converter is not available right now.", retryable: true };
+  }
+  return { message: "The PDF could not be created.", retryable: true };
+}
+
+function isOwnedStoragePath(storagePath: string, userId: string): boolean {
+  const [owner, ...segments] = storagePath.split("/");
+  // Merged applications retain their old folder. Only the owner and the
+  // safety of the object key matter here.
+  return owner === userId && segments.length > 0
+    && segments.every((segment) => segment && !/[^a-z0-9_.-]/i.test(segment) && segment !== "." && segment !== "..");
+}
+
+async function removeCaptureObject(
+  client: SupabaseClient,
+  bucket: CaptureBucket,
+  storagePath: string,
+  userId: string,
+  documentId: string,
+) {
+  if (!isOwnedStoragePath(storagePath, userId)) {
+    console.warn(`Ignored an unsafe storage reference on capture ${documentId}.`);
+    return;
+  }
+  const { error } = await client.storage.from(bucket).remove([storagePath]);
+  if (error) throw error;
 }
 
 async function clearTemporaryCapture(
   client: SupabaseClient,
   documentId: string,
+  userId: string,
   storagePath: string,
 ) {
-  const cleanup = await client.storage.from("temporary-captures").remove([storagePath]);
-  if (cleanup.error) return { error: cleanup.error, removed: false };
+  await removeCaptureObject(client, "temporary-captures", storagePath, userId, documentId);
 
-  const cleared = await client
+  const { error } = await client
     .from("documents")
     .update({ temporary_storage_path: null })
     .eq("id", documentId)
+    .eq("user_id", userId)
+    .eq("capture_status", "COMPLETE")
     .eq("temporary_storage_path", storagePath);
-  return { error: cleared.error, removed: !cleared.error };
+  if (error) throw error;
 }
 
 export async function expireAbandonedUploads(client: SupabaseClient) {
@@ -155,7 +237,7 @@ export async function expireAbandonedUploads(client: SupabaseClient) {
 export async function cleanupStoredPayloads(client: SupabaseClient) {
   const documentResult = await client
     .from("documents")
-    .select("id,temporary_storage_path")
+    .select("id,user_id,temporary_storage_path")
     .eq("capture_status", "COMPLETE")
     .not("temporary_storage_path", "is", null)
     .limit(20);
@@ -163,12 +245,41 @@ export async function cleanupStoredPayloads(client: SupabaseClient) {
 
   let cleaned = 0;
   for (const row of documentResult.data as StoredPayloadRow[]) {
-    if (!row.temporary_storage_path) continue;
-    const result = await clearTemporaryCapture(client, row.id, row.temporary_storage_path);
-    if (result.error) {
-      console.warn(`Temporary capture cleanup retry failed: ${result.error.message}`);
-    } else {
+    try {
+      await clearTemporaryCapture(client, row.id, row.user_id, row.temporary_storage_path);
       cleaned += 1;
+    } catch (error) {
+      console.warn(`Temporary capture cleanup retry failed: ${errorMessage(error)}`);
+    }
+  }
+  return cleaned;
+}
+
+export async function cleanupRetiredPayloads(client: SupabaseClient, now = new Date()) {
+  const { data, error } = await client
+    .from("capture_storage_deletions")
+    .select("id,document_id,user_id,bucket_id,storage_path")
+    .lte("available_at", now.toISOString())
+    .order("available_at")
+    .order("id")
+    .limit(20);
+  if (error) throw error;
+
+  let cleaned = 0;
+  for (const row of data as RetiredPayloadRow[]) {
+    try {
+      await removeCaptureObject(client, row.bucket_id, row.storage_path, row.user_id, row.document_id);
+      const deletion = await client.from("capture_storage_deletions").delete().eq("id", row.id);
+      if (deletion.error) throw deletion.error;
+      cleaned += 1;
+    } catch (cleanupError) {
+      console.warn(`Retired capture cleanup failed: ${errorMessage(cleanupError)}`);
+      // Move a failed deletion behind the rest of the batch so it cannot
+      // hold up other captures.
+      const retryAt = new Date(now.getTime() + 5 * 60_000).toISOString();
+      const deferred = await client.from("capture_storage_deletions")
+        .update({ available_at: retryAt }).eq("id", row.id);
+      if (deferred.error) console.warn(`Could not defer capture cleanup: ${deferred.error.message}`);
     }
   }
   return cleaned;
@@ -176,38 +287,14 @@ export async function cleanupStoredPayloads(client: SupabaseClient) {
 
 export async function enforceOperationalRetention(client: SupabaseClient, now = new Date()) {
   const payloadRetentionDays = retentionDays("FAILED_PAYLOAD_RETENTION_DAYS", 7, 1);
-  const metadataRetentionDays = retentionDays("FAILED_JOB_RETENTION_DAYS", 90, 30);
+  const metadataRetentionDays = retentionDays("FAILED_JOB_RETENTION_DAYS", 90, 30, 3650);
   const payloadCutoff = new Date(now.getTime() - payloadRetentionDays * 86_400_000).toISOString();
+  const retired = await client.rpc("queue_expired_capture_payloads", { p_failed_before: payloadCutoff });
+  if (retired.error) throw retired.error;
+  const abandoned = await client.rpc("queue_abandoned_capture_outputs");
+  if (abandoned.error) throw abandoned.error;
 
-  const captureResult = await client
-    .from("capture_jobs")
-    .select("id,document_id")
-    .eq("status", "FAILED")
-    .lt("failed_at", payloadCutoff)
-    .limit(20);
-  if (captureResult.error) throw captureResult.error;
-
-  const captures = captureResult.data as FailedCaptureRow[];
-  const documentIds = captures.map((job) => job.document_id);
-  const documentsResult = documentIds.length === 0
-    ? { data: [], error: null }
-    : await client
-        .from("documents")
-        .select("id,temporary_storage_path")
-        .in("id", documentIds)
-        .not("temporary_storage_path", "is", null);
-  if (documentsResult.error) throw documentsResult.error;
-
-  let payloadsDeleted = 0;
-  for (const document of documentsResult.data as StoredPayloadRow[]) {
-    if (!document.temporary_storage_path) continue;
-    const result = await clearTemporaryCapture(client, document.id, document.temporary_storage_path);
-    if (result.error) {
-      console.warn(`Expired failed capture cleanup failed: ${result.error.message}`);
-    } else {
-      payloadsDeleted += 1;
-    }
-  }
+  const payloadsDeleted = await cleanupRetiredPayloads(client);
   const purge = await client.rpc("purge_expired_operational_data", {
     p_failed_metadata_retention_days: metadataRetentionDays,
   });
@@ -216,12 +303,14 @@ export async function enforceOperationalRetention(client: SupabaseClient, now = 
   return {
     metadataRowsDeleted: counts?.capture_jobs_deleted ?? 0,
     payloadsDeleted,
+    payloadsRetired: ((retired.data as number | null) ?? 0) + ((abandoned.data as number | null) ?? 0),
   };
 }
 
 function toQueueJob(row: ClaimedJobRow): CaptureQueueJobInput {
-  return captureQueueJobSchema.parse({
+  const parsed = captureQueueJobSchema.safeParse({
     applicationId: row.application_id,
+    attemptId: row.attempt_id,
     capturedAt: row.captured_at,
     company: row.company,
     documentId: row.document_id,
@@ -232,6 +321,13 @@ function toQueueJob(row: ClaimedJobRow): CaptureQueueJobInput {
     temporaryStoragePath: row.temporary_storage_path,
     userId: row.user_id,
   });
+  if (!parsed.success) throw new InvalidCaptureJobError(parsed.error.message);
+  const job = parsed.data;
+  if (!isOwnedStoragePath(job.temporaryStoragePath, job.userId)
+    || !isOwnedStoragePath(job.outputStoragePath, job.userId)) {
+    throw new InvalidCaptureJobError("Capture storage paths do not belong to the job owner.");
+  }
+  return job;
 }
 
 async function convertAndUpload(job: CaptureQueueJobInput, client: SupabaseClient): Promise<CaptureResult> {
@@ -262,7 +358,7 @@ async function convertAndUpload(job: CaptureQueueJobInput, client: SupabaseClien
     const upload = await client.storage.from("job-descriptions").upload(job.outputStoragePath, pdf, {
       cacheControl: "3600",
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
     });
     if (upload.error) throw upload.error;
 
@@ -275,35 +371,57 @@ async function convertAndUpload(job: CaptureQueueJobInput, client: SupabaseClien
   }
 }
 
-export async function runWorkerOnce(client: SupabaseClient): Promise<boolean> {
-  const claim = await client.rpc("claim_capture_job");
+export async function runWorkerOnce(client: SupabaseClient, convert = convertAndUpload): Promise<boolean> {
+  const claim = await client.rpc("claim_capture_attempt");
   if (claim.error) throw claim.error;
   const row = (claim.data as ClaimedJobRow[] | null)?.[0];
   if (!row) return false;
 
-  const job = toQueueJob(row);
+  let job: CaptureQueueJobInput;
   try {
-    const result = await convertAndUpload(job, client);
-    const completion = await client.rpc("complete_capture_job", {
+    job = toQueueJob(row);
+    const result = await convert(job, client);
+    const completionArgs = {
+      p_attempt_id: job.attemptId,
       p_checksum_sha256: result.checksumSha256,
       p_file_size_bytes: result.fileSizeBytes,
       p_job_id: job.jobId,
-    });
-    if (completion.error) throw completion.error;
-    if (!completion.data) throw new Error(`Capture job ${job.jobId} could not be completed.`);
+    };
+    const complete = async () => {
+      const { data, error } = await client.rpc("complete_capture_attempt", completionArgs);
+      if (error) throw error;
+      return data === true;
+    };
 
-    const cleanup = await clearTemporaryCapture(client, job.documentId, job.temporaryStoragePath);
-    if (cleanup.error) console.warn(`Temporary capture cleanup failed: ${cleanup.error.message}`);
-    console.log(`Completed ${job.company} — ${job.position}`);
+    if (!await complete().catch(() => complete())) {
+      throw new Error(`Capture job ${job.jobId} could not be completed.`);
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const outputCleanup = await client.storage.from("job-descriptions").remove([job.outputStoragePath]);
-    if (outputCleanup.error) console.error(`Could not clean up failed PDF: ${outputCleanup.error.message}`);
-    const failure = await client.rpc("fail_capture_job", { p_error: message, p_job_id: job.jobId });
-    if (failure.error) console.error(`Could not record capture failure: ${failure.error.message}`);
+    // The PDF may already be published. Retention collects attempts that
+    // were released without publishing their file.
+    // The owner sees only a plain message. The full error is thrown on to the
+    // worker's log.
+    const { message, retryable } = describeCaptureFailure(error);
+    try {
+      const failure = await client.rpc("fail_capture_attempt", {
+        p_attempt_id: row.attempt_id,
+        p_error: message,
+        p_job_id: row.job_id,
+        p_retryable: retryable,
+      });
+      if (failure.error) throw failure.error;
+    } catch (recordError) {
+      console.error(`Could not record capture failure: ${errorMessage(recordError)}`);
+    }
     throw error;
   }
 
+  try {
+    await clearTemporaryCapture(client, job.documentId, job.userId, job.temporaryStoragePath);
+  } catch (error) {
+    console.warn(`Temporary capture cleanup failed: ${errorMessage(error)}`);
+  }
+  console.log(`Completed ${job.company} — ${job.position}`);
   return true;
 }
 
@@ -335,6 +453,10 @@ async function startWorker() {
         console.error(`Stored payload cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
         return 0;
       });
+      cleanedPayloads += await cleanupRetiredPayloads(client).catch((error: unknown) => {
+        console.error(`Retired payload cleanup failed: ${errorMessage(error)}`);
+        return 0;
+      });
       await expireAbandonedUploads(client).catch((error: unknown) => {
         console.error(`Abandoned upload cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
       });
@@ -347,9 +469,9 @@ async function startWorker() {
         return null;
       });
       retentionWork = retention
-        ? retention.metadataRowsDeleted + retention.payloadsDeleted
+        ? retention.metadataRowsDeleted + retention.payloadsDeleted + retention.payloadsRetired
         : 0;
-      nextRetentionAt = Date.now() + 60 * 60_000;
+      nextRetentionAt = Date.now() + (retention && retention.payloadsRetired >= 20 ? 3_000 : 60 * 60_000);
     }
     if (!captureProcessed && cleanedPayloads === 0 && retentionWork === 0) {
       if (runOnce) return;

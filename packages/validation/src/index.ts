@@ -4,11 +4,6 @@ import { applicationSources, applicationStatuses } from "@rolesave/types";
 export const applicationStatusSchema = z.enum(applicationStatuses);
 // What a person may choose. NEEDS_REVIEW is a legacy value that nothing assigns.
 export const selectableApplicationStatusSchema = applicationStatusSchema.exclude(["NEEDS_REVIEW"]);
-export const triageDecisionSchema = z.enum(["PURSUE", "MAYBE", "PASS"]);
-export const triageSchema = z.object({
-  decision: triageDecisionSchema.nullable(),
-  reason: z.string().trim().max(500).nullable(),
-});
 const applicationSourceSchema = z.enum(applicationSources);
 
 const uuidShapedSchema = z.guid();
@@ -81,11 +76,21 @@ export const createApplicationSchema = z.object({
     .optional(),
 });
 
+function isAtOrBefore(timestamp: string, deadline: string) {
+  const time = Date.parse(timestamp);
+  const dueTime = Date.parse(deadline);
+  if (time !== dueTime) return time < dueTime;
+
+  // The schema also accepts fractions beyond Date's millisecond precision.
+  const fraction = (value: string) => (value.match(/\.(\d+)/)?.[1] ?? "").replace(/0+$/, "");
+  return fraction(timestamp) <= fraction(deadline);
+}
+
 export const applicationActionSchema = z.object({
   title: z.string({ error: "Enter what needs doing" }).trim().min(1, "Enter what needs doing").max(200, "Keep the action to 200 characters or fewer"),
   dueAt: z.iso.datetime({ error: "Choose a due date", offset: true }),
   remindAt: z.iso.datetime({ error: "Choose a valid reminder time", offset: true }).nullable(),
-}).refine((action) => !action.remindAt || action.remindAt <= action.dueAt, {
+}).refine((action) => action.remindAt === null || isAtOrBefore(action.remindAt, action.dueAt), {
   message: "Reminder must be before the action is due",
   path: ["remindAt"],
 });
@@ -106,6 +111,7 @@ export const captureJobSchema = captureMetadataSchema.extend({
 });
 
 export const captureQueueJobSchema = captureJobSchema.extend({
+  attemptId: z.uuid(),
   jobId: z.uuid(),
 });
 

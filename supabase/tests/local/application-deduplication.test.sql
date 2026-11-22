@@ -109,6 +109,9 @@ begin
     select * from (values
       -- Different jobs must stay apart. A false duplicate loses the job.
       (false, 'query ID',            'https://careers.acme.com/job?id=1', 'Acme', null, 'https://careers.acme.com/job?id=2', 'Acme', null),
+      (false, 'query key case',      'https://careers.acme.com/job?ID=1', 'Acme', null, 'https://careers.acme.com/job?id=1', 'Acme', null),
+      (false, 'repeated query keys', 'https://careers.acme.com/job?id=1&id=2', 'Acme', null, 'https://careers.acme.com/job?id=2&id=1', 'Acme', null),
+      (false, 'hash route case',     'https://careers.acme.com/#/Jobs/1', 'Acme', null, 'https://careers.acme.com/#/jobs/1', 'Acme', null),
       (false, 'ref holding job ID',  'https://careers.acme.com/job?ref=JR1', 'Acme', null, 'https://careers.acme.com/job?ref=JR2', 'Acme', null),
       (false, 'hash route',          'https://careers.acme.com/#/jobs/1', 'Acme', null, 'https://careers.acme.com/#/jobs/2', 'Acme', null),
       (false, 'LinkedIn search job', 'https://www.linkedin.com/jobs/search/?currentJobId=111&keywords=x', 'Acme', null, 'https://www.linkedin.com/jobs/search/?currentJobId=222&keywords=x', 'Beta', null),
@@ -116,7 +119,15 @@ begin
       (false, 'two job IDs',         'https://careers.acme.com/job', 'Acme', 'REQ-1', 'https://careers.acme.com/job', 'Acme', 'REQ-2'),
       (false, 'same ID, employers',  'https://acme.com/job', 'Acme', 'REQ-1', 'https://beta.com/job', 'Beta', 'REQ-1'),
       (false, 'shared label as ID',  'https://careers.acme.com/jobs/1', 'Acme', 'engineering', 'https://careers.acme.com/jobs/2', 'Acme', 'engineering'),
+      (false, 'Workday apply pages', 'https://acme.wd5.myworkdayjobs.com/External/job/New-York-NY/Software-Engineer_R1234/apply', 'Acme', null, 'https://acme.wd5.myworkdayjobs.com/External/job/New-York-NY/Data-Engineer_R5678/apply', 'Acme', null),
+      (false, 'Workday slashes',     'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234/', 'Acme', null, 'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Data-Engineer_R5678/', 'Acme', null),
+      (false, 'Greenhouse embeds',   'https://boards.greenhouse.io/embed/job_app?for=acme&token=1111111', 'Acme', null, 'https://boards.greenhouse.io/embed/job_app?for=beta&token=2222222', 'Beta', null),
+      (false, 'one-click forms',     'https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/aaaaaaaa-1111', 'Acme', null, 'https://jobs.smartrecruiters.com/oneclick-ui/company/Beta/publication/bbbbbbbb-2222', 'Beta', null),
+      (false, 'BambooHR view pages', 'https://acme.bamboohr.com/jobs/view.php?id=11', 'Acme', null, 'https://acme.bamboohr.com/jobs/view.php?id=22', 'Acme', null),
       -- The same job must still match.
+      (true,  'Workday apply page',  'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234', 'Acme', null, 'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234/apply', 'Acme', null),
+      (true,  'Workday slash',       'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234', 'Acme', null, 'https://acme.wd5.myworkdayjobs.com/External/job/Remote/Software-Engineer_R1234/', 'Acme', null),
+      (true,  'Greenhouse embed',    'https://job-boards.greenhouse.io/acme/jobs/1111111', 'Acme', null, 'https://boards.greenhouse.io/embed/job_app?for=acme&token=1111111', 'Acme', null),
       (true,  'tracking parameters', 'https://careers.acme.com/jobs/1?utm_source=a&gclid=b', 'Acme', null, 'https://www.careers.acme.com/jobs/1/', 'Acme', null),
       (true,  'attribution ref',     'https://careers.acme.com/jobs/1?ref=linkedin', 'Acme', null, 'https://careers.acme.com/jobs/1?ref=indeed', 'Acme', null),
       (true,  'parameter order',     'https://careers.acme.com/job?id=1&team=2', 'Acme', null, 'https://careers.acme.com/job?team=2&id=1', 'Acme', null),

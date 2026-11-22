@@ -7,19 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/action-timing.test.ts src/lib/attachment-files.test.ts src/lib/auth-errors.test.ts src/lib/format.test.ts src/lib/supabase/fetch-all.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "node --test src/lib/action-timing.test.ts src/lib/application-export.test.ts src/lib/attachment-files.test.ts src/lib/auth-errors.test.ts src/lib/delete-confirmation.test.ts src/lib/failed-job-features.test.ts src/lib/format.test.ts src/lib/role-list.test.ts src/lib/supabase/fetch-all.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@rolesave/types": "workspace:*",
     "@rolesave/validation": "workspace:*",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
+    "exceljs": "^4.4.0",
     "next": "16.4.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

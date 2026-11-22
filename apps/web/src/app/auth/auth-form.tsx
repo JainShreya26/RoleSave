@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
+import { BrandLogo } from "@/app/brand-logo";
 import { authenticate, resendConfirmation, type AuthActionState } from "./actions";
 
 const initialState: AuthActionState = {};
@@ -26,8 +27,7 @@ export function AuthForm({ linkError = false, next = "/dashboard" }: { linkError
   return (
     <div className="auth-card">
       <div className="auth-card-brand">
-        <span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>
-        <strong>RoleSave</strong>
+        <BrandLogo className="auth-card-brand-logo" sizes="150px" />
       </div>
       <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
         <button

@@ -2,13 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth";
+import { validatedCaptureReplayId } from "@/lib/failed-job-features";
 
 export interface RetryFailedJobActionState {
   message?: string;
   success?: boolean;
 }
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function retryFailedJobAction(
   _previousState: RetryFailedJobActionState,
@@ -16,8 +15,8 @@ export async function retryFailedJobAction(
 ): Promise<RetryFailedJobActionState> {
   void _previousState;
   const kind = formData.get("kind");
-  const replayId = formData.get("replayId");
-  if (kind !== "CAPTURE" || typeof replayId !== "string" || !uuidPattern.test(replayId)) {
+  const replayId = validatedCaptureReplayId(kind, formData.get("replayId"));
+  if (!replayId) {
     return { message: "The failed job could not be identified." };
   }
 

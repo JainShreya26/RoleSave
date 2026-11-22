@@ -1,5 +1,8 @@
 export type ActionTiming = "overdue" | "reminder" | "today" | "upcoming";
 
+/** Sent on the window when an action changes, so the sidebar count needn't wait for its next check. */
+export const actionsChangedEvent = "rolesave:actions-changed";
+
 /**
  * Where an open action stands right now. Anything but "upcoming" needs attention.
  * A reminder only brings an action forward: one due today counts as due today

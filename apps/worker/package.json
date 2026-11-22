@@ -9,7 +9,8 @@
     "start": "tsx --env-file-if-exists=../web/.env.local src/index.ts",
     "test:authorization": "tsx --env-file-if-exists=../web/.env.local --env-file-if-exists=../web/.env.development.local scripts/verify-authorization.ts",
     "test": "tsx --test src/index.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:demo": "tsx --env-file-if-exists=../web/.env.local --env-file-if-exists=../web/.env.development.local scripts/seed-demo.ts"
   },
   "dependencies": {
     "@rolesave/validation": "workspace:*",

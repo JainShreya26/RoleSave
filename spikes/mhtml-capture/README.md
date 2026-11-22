@@ -1,5 +1,10 @@
 # MHTML capture and PDF conversion spike
 
+> This is the original experiment. The production converter now lives in
+> [`apps/converter`](../../apps/converter), and the real extension in
+> [`apps/extension`](../../apps/extension). The loopback service below imports
+> the production converter, so it still works for quick manual checks.
+
 This Phase 0 spike tests the riskiest part of job-description preservation before it is integrated into the production API, worker, and private storage. For local development, the extension can now send a capture to a loopback-only converter and download the resulting PDF in one click.
 
 ## What is included
@@ -7,8 +12,8 @@ This Phase 0 spike tests the riskiest part of job-description preservation befor
 - A load-unpacked Manifest V3 extension that captures the active tab after an explicit click and downloads the converted PDF.
 - A converter service bound to `127.0.0.1:4318` that accepts only Chrome-extension origins.
 - A small metadata sidecar containing company, position, source URL, and capture time.
-- A Playwright/Chromium converter that opens a local MHTML file and prints it to PDF.
-- A deterministic static fixture and verification command.
+- The Playwright/Chromium converter from `apps/converter`, which opens a local MHTML file and prints it to PDF.
+- A deterministic static fixture.
 
 The converter normalizes MIME line endings and refuses to create a PDF when Chrome loads fewer than 50 visible characters. This prevents a blank-but-technically-valid PDF from being treated as a successful conversion. Before printing, it also removes fixed/sticky page chrome, hidden tooltips, and inaccessible Material icon ligatures that otherwise overlap job content or render as words.
 
@@ -39,10 +44,10 @@ From the repository root:
 
 ```sh
 pnpm install
-pnpm spike:mhtml:verify
+pnpm converter:verify
 ```
 
-The PDF is written to `spikes/mhtml-capture/output/static-job.pdf`.
+This converts `apps/converter/fixtures/static-job.mhtml` and checks the PDF.
 
 ## Manual capture fallback
 
@@ -55,7 +60,7 @@ The PDF is written to `spikes/mhtml-capture/output/static-job.pdf`.
 7. Convert the capture manually:
 
 ```sh
-pnpm spike:mhtml:convert -- \
+pnpm converter:convert \
   --input spikes/mhtml-capture/captures/example.mhtml \
   --output spikes/mhtml-capture/output/example.pdf \
   --metadata spikes/mhtml-capture/captures/example.json

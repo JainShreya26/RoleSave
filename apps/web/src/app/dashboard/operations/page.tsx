@@ -1,4 +1,5 @@
 import { listFailedJobs } from "@/lib/failed-jobs";
+import { failedJobsEmptyMessage, formatFailedJobsCount } from "@/lib/failed-job-features";
 import { FailedJobCard } from "./failed-job-card";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +15,13 @@ export default async function OperationsPage() {
           <h1>Processing issues</h1>
           <p className="intro">Retry PDF work that could not finish automatically.</p>
         </div>
-        <span className="review-count">{jobs.length} failed</span>
+        <span className="review-count">{formatFailedJobsCount(jobs.length)}</span>
       </header>
 
       <section className="failed-job-list">
         {jobs.length === 0 ? (
           <div className="panel empty-state">
-            <span>✓</span><h2>No failed jobs</h2><p>Jobs that exhaust automatic retries will appear here.</p>
+            <span>✓</span><h2>No failed jobs</h2><p>{failedJobsEmptyMessage}</p>
           </div>
         ) : jobs.map((job) => <FailedJobCard job={job} key={`${job.kind}-${job.id}`} />)}
       </section>

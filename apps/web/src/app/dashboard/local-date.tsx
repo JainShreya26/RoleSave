@@ -17,6 +17,25 @@ export function useViewerTimeZone() {
   );
 }
 
+const minute = 60_000;
+
+function subscribeToMinutes(onChange: () => void) {
+  const interval = window.setInterval(onChange, minute);
+  return () => window.clearInterval(interval);
+}
+
+/**
+ * The current time, to the minute, for labels like "3 days ago". The first render
+ * uses the server's time, so what the server sent and the browser's first pass agree.
+ */
+export function useCurrentMinute(serverTime: number) {
+  return useSyncExternalStore(
+    subscribeToMinutes,
+    () => Math.floor(Date.now() / minute) * minute,
+    () => serverTime,
+  );
+}
+
 export function LocalDate({ fallback, value, withTime = false }: {
   fallback?: string;
   value: string | null;

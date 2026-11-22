@@ -13,6 +13,16 @@ const DEFAULT_CHROME_PATHS = [
   "/usr/bin/chromium-browser",
 ];
 
+/**
+ * The exit code for a page with no readable text. Trying again cannot help, so
+ * the worker fails the save at once instead of retrying it.
+ */
+export const UNREADABLE_PAGE_EXIT_CODE = 3;
+
+export class UnreadablePageError extends Error {
+  name = "UnreadablePageError";
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -109,7 +119,7 @@ export async function convertMhtmlToPdf({
 
     const capturedText = (await page.locator("body").innerText()).trim();
     if (capturedText.length < 50) {
-      throw new Error(
+      throw new UnreadablePageError(
         `MHTML loaded without enough visible text (${capturedText.length} characters); PDF was not created.`,
       );
     }
@@ -219,6 +229,6 @@ async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
+    process.exitCode = error instanceof UnreadablePageError ? UNREADABLE_PAGE_EXIT_CODE : 1;
   });
 }

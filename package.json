@@ -2,17 +2,22 @@
   "name": "rolesave",
   "private": true,
   "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
+    "converter:convert": "node apps/converter/src/convert.mjs",
+    "converter:verify": "node apps/converter/scripts/verify.mjs",
+    "converter:verify:image": "node apps/converter/scripts/verify-image.mjs",
     "dev": "pnpm --parallel --no-bail --filter @rolesave/web --filter @rolesave/worker dev",
     "dev:extension": "pnpm --filter @rolesave/extension dev",
     "dev:web": "pnpm --filter @rolesave/web dev",
     "dev:worker": "pnpm --filter @rolesave/worker dev",
     "lint": "pnpm --recursive --if-present run lint",
-    "mhtml:image:build": "docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:local .",
-    "spike:mhtml:convert": "node spikes/mhtml-capture/scripts/convert.mjs",
+    "mhtml:image:build": "docker build -f apps/converter/Dockerfile -t rolesave-mhtml-converter:local .",
+    "seed:demo": "pnpm --filter @rolesave/worker seed:demo",
     "spike:mhtml:serve": "node spikes/mhtml-capture/scripts/server.mjs",
-    "spike:mhtml:verify": "node spikes/mhtml-capture/scripts/verify.mjs",
     "spike:mhtml:verify-server": "node spikes/mhtml-capture/scripts/verify-server.mjs",
     "supabase:reset": "supabase db reset",
     "supabase:start": "supabase start",
@@ -20,6 +25,7 @@
     "supabase:stop": "supabase stop",
     "test": "pnpm --recursive --if-present run test",
     "test:authorization": "pnpm --filter @rolesave/worker test:authorization",
+    "test:e2e": "pnpm --filter @rolesave/web test:e2e",
     "test:fingerprint": "bash scripts/test-fingerprint.sh",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },

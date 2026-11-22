@@ -8,9 +8,17 @@ type FieldErrors = Record<string, string[]> | undefined;
 
 interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "defaultValue" | "name" | "value"> {
   errors: FieldErrors;
+  /** A short note under the field, shown until an error takes its place. */
+  hint?: string;
   label: string;
   name: string;
+  /** Marks a field that can be left empty, so nobody hunts for a value it doesn't need. */
+  optional?: boolean;
   wide?: boolean;
+}
+
+function FieldLabel({ label, optional }: { label: string; optional?: boolean }) {
+  return optional ? <span>{label} <small className="field-optional">optional</small></span> : label;
 }
 
 /**
@@ -36,13 +44,13 @@ function useFieldError(errors: FieldErrors, name: string) {
 }
 
 /** A text field that shows its own error. */
-export function TextField({ defaultValue = "", errors, label, name, wide = false, ...input }: FieldProps & { defaultValue?: string }) {
+export function TextField({ defaultValue = "", errors, hint, label, name, optional, wide = false, ...input }: FieldProps & { defaultValue?: string }) {
   const error = useFieldError(errors, name);
   return (
     <label className={wide ? "wide" : undefined}>
-      {label}
+      <FieldLabel label={label} optional={optional} />
       <input {...input} {...error.inputProps} defaultValue={defaultValue} name={name} />
-      {error.node}
+      {error.node ?? (hint && <small className="field-hint">{hint}</small>)}
     </label>
   );
 }
@@ -52,17 +60,17 @@ export function TextField({ defaultValue = "", errors, label, name, wide = false
  * not know that zone, so the form submits the exact moment instead of the text
  * that was typed.
  */
-export function DateTimeField({ defaultValue = null, errors, label, name, wide = false, ...input }: FieldProps & { defaultValue?: string | null }) {
+export function DateTimeField({ defaultValue = null, errors, hint, label, name, optional, wide = false, ...input }: FieldProps & { defaultValue?: string | null }) {
   const isBrowser = useSyncExternalStore(subscribeToNothing, () => true, () => false);
   const [typed, setTyped] = useState<string | null>(null);
   const error = useFieldError(errors, name);
   const shown = typed ?? (isBrowser ? toDateTimeLocal(defaultValue) : "");
   return (
     <label className={wide ? "wide" : undefined}>
-      {label}
+      <FieldLabel label={label} optional={optional} />
       <input {...input} {...error.inputProps} onChange={(event) => setTyped(event.target.value)} type="datetime-local" value={shown} />
       <input name={name} type="hidden" value={typed === null ? (defaultValue ?? "") : fromDateTimeLocal(typed)} />
-      {error.node}
+      {error.node ?? (hint && <small className="field-hint">{hint}</small>)}
     </label>
   );
 }

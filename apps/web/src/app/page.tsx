@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BrandLogo } from "./brand-logo";
 import { LandingPage } from "./landing-page";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -18,7 +19,7 @@ export default async function Home() {
   return (
     <main className="setup-shell">
       <section className="setup-card">
-        <span className="brand setup-brand"><span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>RoleSave</span>
+        <span className="setup-brand"><BrandLogo className="setup-brand-logo" preload sizes="190px" /></span>
         <p className="eyebrow">One local prerequisite remains</p>
         <h1>Connect the local Supabase backend</h1>
         <p>The authenticated tracker is implemented. Start the local Supabase containers and add the generated project URL and publishable or anonymous key to <code>.env.local</code>.</p>

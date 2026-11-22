@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
+import { BrandLogo } from "@/app/brand-logo";
 import { DashboardNav } from "./dashboard-nav";
 import { LocalDatesScript } from "./local-date";
 import { requireViewer } from "@/lib/auth";
-
-function LogoMark() {
-  return <span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>;
-}
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { viewer } = await requireViewer();
@@ -15,7 +12,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link className="brand" href="/dashboard"><LogoMark /><span>RoleSave</span></Link>
+        <Link aria-label="RoleSave dashboard" className="dashboard-brand" href="/dashboard">
+          <BrandLogo
+            className="dashboard-brand-logo"
+            preload
+            sizes="(max-width: 900px) 132px, 184px"
+          />
+        </Link>
         <DashboardNav />
         <div className="profile">
           <span className="avatar">{initials}</span>

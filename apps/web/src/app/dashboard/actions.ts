@@ -1,7 +1,7 @@
 "use server";
 
 import { createApplicationSchema, isUuid, selectableApplicationStatusSchema } from "@rolesave/validation";
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireViewer } from "@/lib/auth";
 import { formatDateTime, titleCase } from "@/lib/format";
@@ -14,7 +14,12 @@ export interface ApplicationActionState {
 
 const emptyState: ApplicationActionState = {};
 
-const applicationNotFound = "Application not found or you do not have access.";
+const applicationNotFound = "Role not found, or you do not have access to it.";
+
+type ViewerContext = Awaited<ReturnType<typeof requireViewer>>;
+
+// Keeps each lookup's list of IDs well inside URL length limits.
+const deleteBatchSize = 50;
 
 const savedRoleDateError = {
   appliedAt: ["A saved role hasn't been applied to yet. Clear this date or change the status."],
@@ -40,6 +45,12 @@ function parseApplicationForm(formData: FormData) {
     position: formData.get("position"),
     source: "MANUAL",
   });
+}
+
+/** Brings the open page up to date with whatever changed elsewhere. */
+export async function refreshDashboardAction() {
+  await requireViewer();
+  refresh();
 }
 
 export async function createApplicationAction(
@@ -76,7 +87,7 @@ export async function createApplicationAction(
     identityInput,
   );
   if (identityError) {
-    return { message: `Unable to check for an existing application: ${identityError.message}` };
+    return { message: `Unable to check for an existing role: ${identityError.message}` };
   }
   if (existingApplicationId) {
     redirect(`/dashboard/applications/${existingApplicationId}?existing=1`);
@@ -105,7 +116,7 @@ export async function createApplicationAction(
   }
 
   if (error || !application) {
-    return { message: error?.message ?? "Unable to create the application." };
+    return { message: error?.message ?? "Unable to add the role." };
   }
 
   const { error: eventError } = await supabase.from("application_events").insert({
@@ -137,10 +148,10 @@ export async function mergeDuplicateApplicationAction(
   const mergeApplicationId = formData.get("mergeApplicationId");
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (typeof mergeApplicationId !== "string" || !uuidPattern.test(mergeApplicationId)) {
-    return { message: "Choose the duplicate application to consolidate." };
+    return { message: "Choose the duplicate role to consolidate." };
   }
   if (mergeApplicationId === keepApplicationId) {
-    return { message: "Choose a different application to consolidate." };
+    return { message: "Choose a different role to consolidate." };
   }
 
   const { supabase } = await requireViewer();
@@ -152,7 +163,7 @@ export async function mergeDuplicateApplicationAction(
     return { message: "Another tracked role already has this web address or job ID. Consolidate that role first." };
   }
   if (error || !data) {
-    return { message: error?.message ?? "The applications could not be consolidated." };
+    return { message: error?.message ?? "The roles could not be consolidated." };
   }
 
   revalidatePath("/dashboard");
@@ -215,7 +226,7 @@ export async function updateApplicationAction(
 
   if (error?.code === "23505") {
     return {
-      message: "Another tracked role already has this web address or job ID. If it's the same job, consolidate the two under Duplicate application.",
+      message: "Another tracked role already has this web address or job ID. If it's the same job, consolidate the two under Saved this role twice? on either role's page.",
     };
   }
   if (error) {
@@ -239,7 +250,7 @@ export async function updateApplicationAction(
 
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/applications/${applicationId}`);
-  return { message: "Application details saved.", success: true };
+  return { message: "Details saved.", success: true };
 }
 
 export async function changeStatusAction(
@@ -252,6 +263,8 @@ export async function changeStatusAction(
   if (!status.success) {
     return { errors: { status: ["Choose a valid status"] } };
   }
+  // Undoing a move to Saved puts back the applied date that the move cleared.
+  const restoredAppliedAt = createApplicationSchema.shape.appliedAt.safeParse(optionalString(formData.get("restoreAppliedAt")));
 
   const { supabase, viewer } = await requireViewer();
   const { data: application, error: ownershipError } = await supabase
@@ -269,11 +282,14 @@ export async function changeStatusAction(
     return { message: "That status is already current.", success: true };
   }
 
+  const appliedDateToRestore = status.data !== "SAVED" && !application.applied_at && restoredAppliedAt.success
+    ? restoredAppliedAt.data
+    : null;
   const { error } = await supabase
     .from("applications")
     .update({
       applied_at:
-        status.data === "SAVED" ? null : application.applied_at ?? new Date().toISOString(),
+        status.data === "SAVED" ? null : application.applied_at ?? appliedDateToRestore ?? new Date().toISOString(),
       status: status.data,
     })
     .eq("id", applicationId)
@@ -291,7 +307,7 @@ export async function changeStatusAction(
     evidence: `Status changed manually from ${titleCase(application.status)} to ${titleCase(status.data)}${
       status.data === "SAVED" && application.applied_at
         ? `. Applied date cleared (was ${formatDateTime(application.applied_at, undefined, "UTC")} UTC)`
-        : ""
+        : appliedDateToRestore ? ". Applied date restored" : ""
     }`,
     new_status: status.data,
     previous_status: application.status,
@@ -308,13 +324,11 @@ export async function changeStatusAction(
   return { message: "Status updated.", success: true };
 }
 
-export async function deleteApplicationAction(applicationId: string, _formData: FormData) {
-  void _formData;
-  const { supabase, viewer } = await requireViewer();
+async function deleteApplicationRecords({ supabase, viewer }: ViewerContext, applicationIds: string[]) {
   const { data: documents, error: documentsError } = await supabase
     .from("documents")
     .select("storage_path,temporary_storage_path")
-    .eq("application_id", applicationId)
+    .in("application_id", applicationIds)
     .eq("user_id", viewer.id);
 
   if (documentsError) {
@@ -325,7 +339,7 @@ export async function deleteApplicationAction(applicationId: string, _formData: 
   const { data: attachments, error: attachmentsError } = await supabase
     .from("application_attachments")
     .select("storage_path")
-    .eq("application_id", applicationId)
+    .in("application_id", applicationIds)
     .eq("user_id", viewer.id);
   if (attachmentsError && attachmentsError.code !== "PGRST205" && attachmentsError.code !== "42P01") {
     throw new Error(`Unable to inspect application files: ${attachmentsError.message}`);
@@ -361,18 +375,52 @@ export async function deleteApplicationAction(applicationId: string, _formData: 
     }
   }
 
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("applications")
     .delete()
-    .eq("id", applicationId)
-    .eq("user_id", viewer.id);
+    .in("id", applicationIds)
+    .eq("user_id", viewer.id)
+    .select("id");
 
   if (error) {
     throw new Error(`Unable to delete the application: ${error.message}`);
   }
+  return deleted.length;
+}
 
+export async function deleteApplicationAction(applicationId: string, _formData: FormData) {
+  void _formData;
+  await deleteApplicationRecords(await requireViewer(), [applicationId]);
   revalidatePath("/dashboard");
   redirect("/dashboard");
+}
+
+export async function deleteApplicationsAction(
+  _previousState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  const applicationIds = [...new Set(formData.getAll("applicationId").filter(isUuid))];
+  if (applicationIds.length === 0) return { message: "Select at least one role to delete." };
+
+  const context = await requireViewer();
+  let deleted = 0;
+  try {
+    for (let start = 0; start < applicationIds.length; start += deleteBatchSize) {
+      deleted += await deleteApplicationRecords(context, applicationIds.slice(start, start + deleteBatchSize));
+    }
+  } catch (error) {
+    console.error("Unable to delete the selected applications", error);
+    revalidatePath("/dashboard");
+    return {
+      message: deleted > 0
+        ? `Deleted ${deleted} of ${applicationIds.length} roles. Try again to delete the rest.`
+        : "Could not delete the selected roles. Try again.",
+    };
+  }
+
+  revalidatePath("/dashboard");
+  if (deleted === 0) return { message: "Those roles were already deleted.", success: true };
+  return { message: deleted === 1 ? "Deleted 1 role." : `Deleted ${deleted} roles.`, success: true };
 }
 
 export async function retryCaptureAction(

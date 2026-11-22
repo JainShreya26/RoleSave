@@ -7,6 +7,7 @@ import type { ApplicationEventRow, ApplicationRow, DocumentRow } from "@/lib/sup
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export interface ApplicationListItem extends ApplicationRow {
+  document_id: string | null;
   document_status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED" | null;
 }
 
@@ -21,11 +22,13 @@ export interface ApplicationOption {
 
 export type ApplicationDetailItem = Pick<
   ApplicationRow,
-  "applied_at" | "company" | "created_at" | "id" | "job_id" | "original_url" | "position" | "status" | "triage_decision" | "triage_reason" | "updated_at"
+  "applied_at" | "company" | "created_at" | "id" | "job_id" | "original_url" | "position" | "status" | "updated_at"
 >;
 
 export interface ApplicationDocumentItem {
   capture_status: DocumentRow["capture_status"];
+  /** Why the PDF could not be made, in words meant for the owner. */
+  failure_reason: string | null;
   id: string;
   pdf_available: boolean;
   saved_at: string;
@@ -57,14 +60,14 @@ export async function listApplications(status?: string): Promise<ApplicationList
     throw new Error(`Unable to load applications: ${error.message}`);
   }
 
-  const documentStatus = new Map<string, ApplicationListItem["document_status"]>();
+  const latestDocument = new Map<string, { capture_status: ApplicationListItem["document_status"]; id: string }>();
 
   if (data.length > 0) {
     // Read by user rather than listing every application ID: enough IDs make
     // the request too long for the server, which is refused outright.
     const { data: documents, error: documentError } = await fetchAllRows((from, to) => supabase
       .from("documents")
-      .select("application_id,capture_status")
+      .select("id,application_id,capture_status")
       .eq("user_id", viewer.id)
       .order("created_at", { ascending: false })
       .order("id")
@@ -75,8 +78,8 @@ export async function listApplications(status?: string): Promise<ApplicationList
     }
 
     documents.forEach((document) => {
-      if (!documentStatus.has(document.application_id)) {
-        documentStatus.set(document.application_id, document.capture_status);
+      if (!latestDocument.has(document.application_id)) {
+        latestDocument.set(document.application_id, document);
       }
     });
   }
@@ -84,21 +87,20 @@ export async function listApplications(status?: string): Promise<ApplicationList
   return data
     .map((application) => ({
       ...application,
-      triage_decision: application.triage_decision ?? null,
-      triage_reason: application.triage_reason ?? null,
-      document_status: documentStatus.get(application.id) ?? null,
+      document_id: latestDocument.get(application.id)?.id ?? null,
+      document_status: latestDocument.get(application.id)?.capture_status ?? null,
     }))
     .sort(mostRecentlyUpdatedFirst);
 }
 
-export async function getApplicationDetail(id: string, featuresAvailable = true): Promise<{
+export async function getApplicationDetail(id: string): Promise<{
   application: ApplicationDetailItem;
   applicationOptions: ApplicationOption[];
   documents: ApplicationDocumentItem[];
   events: ApplicationTimelineItem[];
 }> {
   const { supabase, viewer } = await requireViewer();
-  const { data: baseApplication, error } = await supabase
+  const { data: application, error } = await supabase
     .from("applications")
     .select("id,company,position,status,original_url,job_id,applied_at,created_at,updated_at")
     .eq("id", id)
@@ -108,25 +110,9 @@ export async function getApplicationDetail(id: string, featuresAvailable = true)
   if (error) {
     throw new Error(`Unable to load the application: ${error.message}`);
   }
-  if (!baseApplication) {
+  if (!application) {
     notFound();
   }
-
-  let triage: Pick<ApplicationDetailItem, "triage_decision" | "triage_reason"> = {
-    triage_decision: null,
-    triage_reason: null,
-  };
-  if (featuresAvailable) {
-    const { data, error: triageError } = await supabase
-      .from("applications")
-      .select("triage_decision,triage_reason")
-      .eq("id", id)
-      .eq("user_id", viewer.id)
-      .single();
-    if (triageError) throw new Error(`Unable to load the role decision: ${triageError.message}`);
-    triage = data;
-  }
-  const application: ApplicationDetailItem = { ...baseApplication, ...triage };
 
   const { data: events, error: eventsError } = await fetchAllRows((from, to) => supabase
     .from("application_events")
@@ -181,8 +167,22 @@ export async function getApplicationDetail(id: string, featuresAvailable = true)
       else console.error(`Unable to open a document for application ${id}: ${item.error}`);
     }
   }
+  const failureReasons = new Map<string, string>();
+  const failedIds = documentRows.filter((row) => row.capture_status === "FAILED").map((row) => row.id);
+  if (failedIds.length > 0) {
+    const { data: failedJobs, error: failedJobsError } = await supabase
+      .from("capture_jobs")
+      .select("document_id,last_error")
+      .eq("user_id", viewer.id)
+      .in("document_id", failedIds);
+    if (failedJobsError) console.error(`Unable to read capture failures for application ${id}: ${failedJobsError.message}`);
+    for (const job of failedJobs ?? []) {
+      if (job.last_error) failureReasons.set(job.document_id, job.last_error);
+    }
+  }
   const documents: ApplicationDocumentItem[] = documentRows.map((row) => ({
     capture_status: row.capture_status,
+    failure_reason: failureReasons.get(row.id) ?? null,
     id: row.id,
     pdf_available: openablePaths.has(row.storage_path),
     saved_at: row.captured_at ?? row.created_at,

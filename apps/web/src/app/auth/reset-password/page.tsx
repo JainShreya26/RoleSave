@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BrandLogo } from "@/app/brand-logo";
 import { ResetPasswordForm } from "./reset-password-form";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -16,7 +17,7 @@ export default async function ResetPasswordPage() {
   return (
     <main className="auth-shell">
       <section className="auth-intro">
-        <span className="brand auth-brand"><span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>RoleSave</span>
+        <span className="auth-brand"><BrandLogo className="auth-brand-logo" preload sizes="210px" /></span>
         <p className="eyebrow">Account recovery</p>
         <h1>Choose a new password.</h1>
       </section>

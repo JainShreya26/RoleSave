@@ -1,14 +1,16 @@
 import type { NextConfig } from "next";
 
 const isDevelopment = process.env.NODE_ENV === "development";
-// Local Supabase is not on supabase.co, so allow it in development only.
-const localSupabaseOrigin = isDevelopment && process.env.NEXT_PUBLIC_SUPABASE_URL
+// The browser talks to Supabase directly for file uploads and counts. Allow the
+// configured project as well as supabase.co, so local Supabase and self-hosted
+// Supabase on its own domain both work.
+const configuredSupabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? ` ${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin}`
   : "";
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
-  `connect-src 'self' https://*.supabase.co${localSupabaseOrigin}`,
+  `connect-src 'self' https://*.supabase.co${configuredSupabaseOrigin}`,
   "font-src 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",

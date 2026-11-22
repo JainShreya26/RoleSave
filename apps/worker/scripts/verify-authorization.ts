@@ -43,15 +43,19 @@ async function main() {
   const applicationIds: string[] = [];
   const documentIds: string[] = [];
   const captureJobIds: string[] = [];
+  const capturePaths: string[] = [];
   const actionIds: string[] = [];
   const attachmentPaths: string[] = [];
 
   for (const [index, viewer] of viewers.entries()) {
+    const originalUrl = `https://jobs.example.test/authorization/${suffix}/${index}`;
+    const company = `Authorization Owner ${index + 1}`;
     const application = await viewer.client
       .from("applications")
       .insert({
-        company: `Authorization Owner ${index + 1}`,
+        company,
         company_normalized: "placeholder",
+        original_url: originalUrl,
         position: "Test Engineer",
         position_normalized: "placeholder",
         source: "MANUAL",
@@ -89,40 +93,31 @@ async function main() {
     });
     if (attachment.error) throw attachment.error;
 
-    const temporaryPath = `${viewer.id}/authorization-test/${randomUUID()}.mhtml`;
-    const outputPath = `${viewer.id}/authorization-test/${randomUUID()}.pdf`;
+    const session = await viewer.client.rpc("create_capture_session", {
+      p_company: company,
+      p_position: "Test Engineer",
+      p_original_url: originalUrl,
+      p_captured_at: new Date().toISOString(),
+      p_idempotency_key: randomUUID(),
+    }).single<{ application_id: string; document_id: string; job_id: string; temporary_storage_path: string }>();
+    if (session.error) throw session.error;
+    assert.equal(session.data.application_id, application.data.id);
+    const temporaryPath = session.data.temporary_storage_path;
+    capturePaths.push(temporaryPath);
     const upload = await viewer.client.storage
       .from("temporary-captures")
       .upload(temporaryPath, Buffer.from("authorization test capture"), { contentType: "application/octet-stream" });
     if (upload.error) throw upload.error;
     storageObjects.push({ bucket: "temporary-captures", path: temporaryPath });
 
-    const document = await viewer.client
-      .from("documents")
-      .insert({
-        application_id: application.data.id,
-        capture_status: "FAILED",
-        storage_path: outputPath,
-        temporary_storage_path: temporaryPath,
-        user_id: viewer.id,
-      })
-      .select("id")
-      .single();
-    if (document.error) throw document.error;
-    documentIds.push(document.data.id);
-
-    const captureJobId = randomUUID();
-    const captureJob = await admin.from("capture_jobs").insert({
-      application_id: application.data.id,
-      attempt_count: 3,
-      document_id: document.data.id,
-      id: captureJobId,
-      idempotency_key: randomUUID(),
-      status: "FAILED",
-      user_id: viewer.id,
+    const failure = await viewer.client.rpc("fail_capture_upload", {
+      p_job_id: session.data.job_id,
+      p_error: "Authorization test fixture",
     });
-    if (captureJob.error) throw captureJob.error;
-    captureJobIds.push(captureJobId);
+    if (failure.error) throw failure.error;
+    assert.equal(failure.data, true);
+    documentIds.push(session.data.document_id);
+    captureJobIds.push(session.data.job_id);
   }
 
   const [applications, captures, actions, attachments] = await Promise.all([
@@ -163,11 +158,25 @@ async function main() {
 
   const crossStorageRead = await viewerA.client.storage
     .from("temporary-captures")
-    .download(storageObjects[2].path);
+    .download(capturePaths[1]);
   assert.ok(crossStorageRead.error, "Cross-user storage download should be denied.");
   const crossAttachmentRead = await viewerA.client.storage
     .from("application-attachments").download(attachmentPaths[1]);
   assert.ok(crossAttachmentRead.error, "Cross-user application file download should be denied.");
+
+  const forgedCapture = await viewerA.client.from("documents").insert({
+    application_id: applicationIds[0],
+    user_id: viewerA.id,
+    capture_status: "COMPLETE",
+    storage_path: `${viewerA.id}/${randomUUID()}.pdf`,
+    temporary_storage_path: capturePaths[1],
+  });
+  assert.equal(forgedCapture.error?.code, "42501", "Users cannot plant a capture for privileged cleanup.");
+  const redirectedCapture = await viewerA.client.from("documents").update({
+    capture_status: "COMPLETE",
+    temporary_storage_path: capturePaths[1],
+  }).eq("id", documentIds[0]);
+  assert.equal(redirectedCapture.error?.code, "42501", "Users cannot redirect privileged cleanup.");
 
   const crossCaptureReplay = await viewerA.client.rpc("retry_failed_capture", { p_document_id: documentIds[1] });
   if (crossCaptureReplay.error) throw crossCaptureReplay.error;

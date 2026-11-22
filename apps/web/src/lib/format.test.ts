@@ -4,7 +4,7 @@ import test from "node:test";
 // Set before any date is read, so these tests do not depend on the machine.
 process.env.TZ = "Asia/Tokyo";
 
-const { eventTypeLabel, formatDate, formatDateTime, fromDateTimeLocal, toDateTimeLocal } = await import("./format.ts");
+const { eventTypeLabel, formatDate, formatDateTime, fromDateTimeLocal, timeAgo, toDateTimeLocal } = await import("./format.ts");
 
 // 02:00 UTC on Oct 2 is the evening of Oct 1 in New York and the morning of Oct 2 in Tokyo.
 const lateEvening = "2026-10-02T02:00:00.000Z";
@@ -44,7 +44,29 @@ test("an empty input stores nothing", () => {
 });
 
 test("timeline event types read as labels", () => {
-  assert.equal(eventTypeLabel("JD_SAVED"), "JD Saved");
-  assert.equal(eventTypeLabel("MARKED_AS_APPLIED"), "Marked As Applied");
-  assert.equal(eventTypeLabel("APPLICATION_WITHDRAWN"), "Application Withdrawn");
+  assert.equal(eventTypeLabel("JD_SAVED"), "Job description saved");
+  assert.equal(eventTypeLabel("MARKED_AS_APPLIED"), "Marked as applied");
+  assert.equal(eventTypeLabel("MANUAL_CORRECTION"), "Status changed");
+  assert.equal(eventTypeLabel("GENERAL_UPDATE"), "Update");
+  // A type added later still reads as a sentence.
+  assert.equal(eventTypeLabel("SOMETHING_NEW"), "Something new");
+});
+
+test("time ago uses the largest unit that reads well", () => {
+  const now = Date.parse("2026-11-05T12:00:00.000Z");
+  const before = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  assert.equal(timeAgo(before(0), now), "Just now");
+  assert.equal(timeAgo(before(1), now), "1 minute ago");
+  assert.equal(timeAgo(before(59), now), "59 minutes ago");
+  assert.equal(timeAgo(before(60), now), "1 hour ago");
+  assert.equal(timeAgo(before(24 * 60), now), "1 day ago");
+  assert.equal(timeAgo(before(13 * 24 * 60), now), "13 days ago");
+  assert.equal(timeAgo(before(14 * 24 * 60), now), "2 weeks ago");
+  assert.equal(timeAgo(before(60 * 24 * 60), now), "2 months ago");
+  assert.equal(timeAgo(before(800 * 24 * 60), now), "2 years ago");
+});
+
+test("a time slightly ahead of this computer's clock counts as just now", () => {
+  const now = Date.parse("2026-11-05T12:00:00.000Z");
+  assert.equal(timeAgo("2026-11-05T12:03:00.000Z", now), "Just now");
 });

@@ -4,6 +4,11 @@ packages:
   - "spikes/*"
 allowBuilds:
   esbuild: true
+  sharp: false
   unrs-resolver: true
-minimumReleaseAgeExclude:
-  - mailparser@3.9.16
+# exceljs pins old releases of these. Patched versions are drop-in compatible,
+# and uuid 11 still supports require(), which exceljs uses.
+overrides:
+  "brace-expansion@^1": "^1.1.22"
+  "brace-expansion@^2": "^2.1.8"
+  "uuid@^8": "^11.1.1"

@@ -163,6 +163,7 @@ export interface Database {
         Row: {
           application_id: string;
           attempt_count: number;
+          attempt_id: string | null;
           available_at: string | null;
           completed_at: string | null;
           created_at: string;
@@ -171,6 +172,7 @@ export interface Database {
           id: string;
           idempotency_key: string;
           last_error: string | null;
+          lease_expires_at: string | null;
           status: Database["public"]["Enums"]["capture_status"];
           updated_at: string;
           user_id: string;
@@ -178,6 +180,7 @@ export interface Database {
         Insert: {
           application_id: string;
           attempt_count?: number;
+          attempt_id?: string | null;
           available_at?: string | null;
           completed_at?: string | null;
           created_at?: string;
@@ -186,6 +189,7 @@ export interface Database {
           id?: string;
           idempotency_key: string;
           last_error?: string | null;
+          lease_expires_at?: string | null;
           status?: Database["public"]["Enums"]["capture_status"];
           updated_at?: string;
           user_id: string;
@@ -253,10 +257,11 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
-      claim_capture_job: {
+      claim_capture_attempt: {
         Args: Record<PropertyKey, never>;
         Returns: {
           application_id: string;
+          attempt_id: string;
           captured_at: string;
           company: string;
           document_id: string;
@@ -268,8 +273,8 @@ export interface Database {
           user_id: string;
         }[];
       };
-      complete_capture_job: {
-        Args: { p_checksum_sha256: string; p_file_size_bytes: number; p_job_id: string };
+      complete_capture_attempt: {
+        Args: { p_attempt_id: string; p_checksum_sha256: string; p_file_size_bytes: number; p_job_id: string };
         Returns: boolean;
       };
       create_capture_session: {
@@ -293,8 +298,8 @@ export interface Database {
           temporary_storage_path: string;
         }[];
       };
-      fail_capture_job: {
-        Args: { p_error: string; p_job_id: string };
+      fail_capture_attempt: {
+        Args: { p_attempt_id: string; p_error: string; p_job_id: string };
         Returns: boolean;
       };
       fail_capture_upload: {
@@ -331,6 +336,10 @@ export interface Database {
       retry_failed_capture: {
         Args: { p_document_id: string };
         Returns: boolean;
+      };
+      queue_abandoned_capture_outputs: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
       };
       purge_expired_operational_data: {
         Args: { p_failed_metadata_retention_days?: number };

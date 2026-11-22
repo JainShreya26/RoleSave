@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import type { FailedJobItem } from "@/lib/failed-jobs";
+import { useActionState, useEffect } from "react";
+import { capturesChangedEvent, formatProcessingAttempts, type FailedJobItem } from "@/lib/failed-job-features";
 import { LocalDate } from "../local-date";
 import { retryFailedJobAction, type RetryFailedJobActionState } from "./actions";
 
@@ -9,6 +9,9 @@ const initialState: RetryFailedJobActionState = {};
 
 export function FailedJobCard({ job }: { job: FailedJobItem }) {
   const [state, action, pending] = useActionState(retryFailedJobAction, initialState);
+  useEffect(() => {
+    if (state.success) window.dispatchEvent(new Event(capturesChangedEvent));
+  }, [state]);
   const title = `${job.company ?? "Application"} — ${job.position ?? "job description"}`;
 
   return (
@@ -20,7 +23,7 @@ export function FailedJobCard({ job }: { job: FailedJobItem }) {
         </div>
         <h2>{title}</h2>
         <p className="failed-job-error">{job.lastError}</p>
-        <small>{job.attemptCount} processing attempt{job.attemptCount === 1 ? "" : "s"}</small>
+        <small>{formatProcessingAttempts(job.attemptCount)}</small>
       </div>
       <div className="failed-job-actions">
         <form action={action}>

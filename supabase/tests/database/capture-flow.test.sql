@@ -3,7 +3,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(72);
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -49,6 +49,12 @@ select is((select application_reused from flow_sessions where label = 'new'), fa
 select is((select application_company from flow_sessions where label = 'new'), 'Flow Co', 'the session names the company');
 select is((select application_position from flow_sessions where label = 'new'), 'Engineer', 'the session names the position');
 select is((select capture_status from flow_sessions where label = 'new'), 'PENDING', 'a new session is pending');
+select is(
+  (select count(*) from public.application_events
+    where application_id = (select application_id from flow_sessions where label = 'new')
+      and evidence = 'Saved from the browser extension' and source = 'EXTENSION'),
+  1::bigint, 'a role saved from the extension starts its timeline'
+);
 select ok(public.retry_capture_upload((select job_id from flow_sessions where label = 'new')), 'a new session may upload');
 select is(
   (select available_at from public.capture_jobs where id = (select job_id from flow_sessions where label = 'new')),
@@ -98,6 +104,12 @@ select is(
 );
 select is((select application_company from flow_sessions where label = 'same-posting'), 'Flow Co', 'a reused session names the saved company, not the typed one');
 select is((select application_position from flow_sessions where label = 'same-posting'), 'Engineer', 'a reused session names the saved position, not the typed one');
+select is(
+  (select count(*) from public.application_events
+    where application_id = (select application_id from flow_sessions where label = 'new')
+      and evidence = 'Saved from the browser extension'),
+  1::bigint, 'saving a role again does not repeat its first timeline entry'
+);
 
 -- ---------------------------------------------------------------------------
 -- The same web address is the same posting, unless job IDs say otherwise
@@ -175,6 +187,35 @@ select is((select status::text from public.capture_jobs where id = (select job_i
 select is((select capture_status::text from public.documents where id = (select document_id from flow_sessions where label = 'failed')), 'PENDING', 'a retry returns the document to pending');
 
 -- ---------------------------------------------------------------------------
+-- Retrying conversion work from the processing-issues page
+-- ---------------------------------------------------------------------------
+
+select pg_temp.start_session('conversion-failed', 'https://flow.example.com/jobs/conversion-failed', 'c0000000-0000-4000-8000-000000000015');
+
+reset role;
+insert into storage.objects (bucket_id, name, owner_id)
+select 'temporary-captures', temporary_storage_path, 'a0000000-0000-4000-8000-00000000000a'
+from flow_sessions where label = 'conversion-failed';
+update public.capture_jobs
+set status = 'FAILED', attempt_count = 3, available_at = null, last_error = 'Converter failed'
+where id = (select job_id from flow_sessions where label = 'conversion-failed');
+update public.documents set capture_status = 'FAILED'
+where id = (select document_id from flow_sessions where label = 'conversion-failed');
+set local role authenticated;
+
+select ok(public.retry_failed_capture((select document_id from flow_sessions where label = 'conversion-failed')), 'a failed conversion with its payload can be replayed');
+select is((select status::text from public.capture_jobs where id = (select job_id from flow_sessions where label = 'conversion-failed')), 'PENDING', 'replay returns the capture job to pending');
+select is((select attempt_count from public.capture_jobs where id = (select job_id from flow_sessions where label = 'conversion-failed')), 0, 'replay resets the processing attempts');
+select is((select last_error from public.capture_jobs where id = (select job_id from flow_sessions where label = 'conversion-failed')), null::text, 'replay clears the last error');
+select isnt((select available_at from public.capture_jobs where id = (select job_id from flow_sessions where label = 'conversion-failed')), null, 'replay makes the capture available to the worker');
+select is((select capture_status::text from public.documents where id = (select document_id from flow_sessions where label = 'conversion-failed')), 'PENDING', 'replay returns the document to pending');
+
+select pg_temp.start_session('missing-payload', 'https://flow.example.com/jobs/missing-payload', 'c0000000-0000-4000-8000-000000000016');
+select public.fail_capture_upload((select job_id from flow_sessions where label = 'missing-payload'), 'Upload broke');
+select ok(not public.retry_failed_capture((select document_id from flow_sessions where label = 'missing-payload')), 'a failed capture without its payload cannot be replayed');
+select is((select status::text from public.capture_jobs where id = (select job_id from flow_sessions where label = 'missing-payload')), 'FAILED', 'a refused replay leaves the capture failed');
+
+-- ---------------------------------------------------------------------------
 -- Capturing again after a failed capture's file expired
 -- ---------------------------------------------------------------------------
 
@@ -192,14 +233,14 @@ select is(
   (select job_id from flow_sessions where label = 'expired'),
   'capturing again reuses the failed job'
 );
-select is(
+select isnt(
   (select temporary_storage_path from flow_sessions where label = 'recaptured'),
   (select temporary_storage_path from flow_sessions where label = 'expired'),
-  'capturing again gets its storage path back'
+  'capturing again uses a different key from the expired file'
 );
 select is(
   (select temporary_storage_path from public.documents where id = (select document_id from flow_sessions where label = 'recaptured')),
-  (select temporary_storage_path from flow_sessions where label = 'expired'),
+  (select temporary_storage_path from flow_sessions where label = 'recaptured'),
   'the document records the restored path'
 );
 select ok(public.retry_capture_upload((select job_id from flow_sessions where label = 'recaptured')), 'an expired capture can upload again');

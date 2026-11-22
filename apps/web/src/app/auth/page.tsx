@@ -1,5 +1,6 @@
 import { safeRedirectPath } from "@rolesave/validation";
 import { redirect } from "next/navigation";
+import { BrandLogo } from "@/app/brand-logo";
 import { AuthForm } from "./auth-form";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ export default async function AuthPage({
   return (
     <main className="auth-shell">
       <section className="auth-intro">
-        <span className="brand auth-brand"><span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>RoleSave</span>
+        <span className="auth-brand"><BrandLogo className="auth-brand-logo" preload sizes="210px" /></span>
         <p className="eyebrow">Your private job-search record</p>
         <h1>Keep the details. Lose the spreadsheet.</h1>
         <p>RoleSave brings applications and saved job descriptions into one clear timeline.</p>

@@ -40,12 +40,17 @@ insert into public.application_attachments (
   'e2000000-0000-4000-8000-000000000002', auth.uid(), 'resume.pdf', 10, 'application/pdf',
   'a2000000-0000-4000-8000-00000000000a/merge-resume.pdf'
 );
+
+-- Seed the finished document with the database role. Users can read it, but
+-- only the capture workflow may write its metadata.
+reset role;
 insert into public.documents (
   application_id, user_id, storage_path, capture_status
 ) values (
   'e2000000-0000-4000-8000-000000000002', auth.uid(),
   'a2000000-0000-4000-8000-00000000000a/merge-job-description.pdf', 'COMPLETE'
 );
+set local role authenticated;
 
 select lives_ok(
   $$ select public.merge_duplicate_applications('e2000000-0000-4000-8000-000000000001', 'e2000000-0000-4000-8000-000000000002') $$,

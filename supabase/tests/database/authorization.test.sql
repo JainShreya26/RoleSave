@@ -1,7 +1,22 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
+
+select is_empty(
+  $$select role_name, tablename
+    from pg_tables cross join (values ('anon'), ('authenticated')) as api_roles(role_name)
+    where schemaname = 'public'
+      and has_table_privilege(role_name, format('%I.%I', schemaname, tablename), 'TRUNCATE, REFERENCES, TRIGGER, MAINTAIN')$$,
+  'API roles have no table management privileges on the application tables'
+);
+
+create table public.table_grant_fixture (id integer);
+select is_empty(
+  $$select role_name from (values ('anon'), ('authenticated')) as api_roles(role_name)
+    where has_table_privilege(role_name, 'public.table_grant_fixture', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN')$$,
+  'tables created by the migration role require explicit grants for API clients'
+);
 
 select ok(
   has_table_privilege('service_role', 'public.capture_jobs', 'INSERT'),

@@ -91,101 +91,123 @@ Location: `apps/web/src/app/auth`, `apps/web/src/proxy.ts`.
 
 ---
 
-## 3. Applications Dashboard
+## 3. Roles Dashboard
 
 Location: `apps/web/src/app/dashboard/page.tsx`.
 
-### 3.1 Summary cards
-- Tracked roles, To decide (saved roles with no decision), Active (applied, assessment, interview), and Interviews.
+The page is titled **Roles**. The line under the title gives the total and how many are in progress (applied, assessment, interview), and **Add role** sits beside it. Every page in the app shares one content column, so the left edge does not move between pages.
+
+### 3.1 Status tabs
+- One tab for all roles and one for each status: Saved, Applied, Assessment, Interview, Offer, Rejected, Withdrawn. Each shows its count.
+- Choosing a tab filters the table at once. Choosing the current one goes back to all roles.
+- When the tabs do not fit, they scroll sideways, and the last one in view fades to show there are more.
 
 ### 3.2 Needs attention
-- Compact list of actions that are overdue, have a reminder due, or are due today. It shows the first five, with a link to the rest.
+- Compact list of actions that are overdue, have a reminder due, or are due today, one line each. It shows the first five, with a link to the rest.
+- The panel is left off the page when no open action is due within a day or has a reminder that has passed, so the roles table starts higher.
+- Ticking an action shows as done straight away, and the sidebar count follows.
 - Link to the full Actions page.
 
 ### 3.3 Tracked roles table
-- Columns: company and role, applied date, status, decision, JD document state, last updated.
-- Sorted by most recently updated.
+- Columns: company and role, status, applied date with the time since, job description, last updated. The exact update time shows on hover.
+- Clicking anywhere on a row opens the role. An icon beside the company name opens the original job posting in a new tab.
+- The job description column links to the PDF when it is ready, shows **Saving PDF** while it is being made, and links to the role to retry when it failed.
+- Sorted by most recently updated. Clicking a column heading sorts by company, status, applied date, or last updated, and clicking it again reverses the order. Roles with no applied date stay last in both directions.
+- Long lists draw 100 roles at a time, with **Show 100 more** and **Show all**. Everything loads either way, so search, filters, and counts cover the whole list.
+- The table catches up without a reload: on returning to the tab, and every 15 seconds while a PDF is being made.
 - Empty states for no roles and for filters that match nothing.
-- When the table does not fit its panel, such as on a phone or tablet, each role becomes a stacked row.
+- When the table does not fit its panel, such as on a phone or tablet, each role becomes a stacked row and a dropdown takes over sorting.
 
-### 3.4 Filters
-- Filtering updates the table without leaving the page. The dropdowns follow **Clear** and the Back button.
-- Status filter: Saved, Applied, Assessment, Interview, Offer, Rejected, Withdrawn.
-- Decision filter: Active (default, hides passed saved roles), Not reviewed, Pursue, Maybe, Pass, All.
-- Clear link resets both.
+### 3.4 Search and filters
+- The search box matches every word typed across company and position, in any order, ignoring case and accents. Press `/` to jump to it and `Esc` to clear it.
+- The tab counts follow the search, so they show where the matches are.
+- Status, search, and sort are kept in the page address, so Back, Forward, reload, and shared links all return to the same view.
+- While a filter or search is on, the toolbar shows how many roles match, with **Clear filters** to reset the status and the search.
 
-### 3.5 Quick triage
-- Inline decision control on saved roles, so a role can be marked Pursue, Maybe, or Pass without opening it.
+### 3.5 Change status from the table
+- Each row's status is a dropdown. The row and the counts change at once, and the change is recorded on the timeline as it is on the role's page.
+- A message confirms the move and offers **Undo** for 10 seconds. Undoing a move to Saved also restores the applied date that the move cleared.
+- If the change can't be saved, the row goes back and the message says why. The page stays put when the connection is lost.
 
-### 3.6 Add a role manually
-- Create form with company, position, URL, job ID, applied date, and initial status.
+### 3.6 Select, download, and delete
+- A checkbox on each row selects it, and the one in the table heading selects every role showing.
+- **Export** above the table downloads every role in the current view (after the status filter and search) as an Excel file, with nothing to select first.
+- A bar pinned to the bottom of the screen appears once something is selected. It shows the count and offers **Clear**, **Export selected**, and **Delete**.
+- **Delete** asks for confirmation, naming the roles, then removes them permanently with their timelines, actions, PDFs, and files. Every permanent change in the app uses this same dialog. It stays open until the work is done, and if the work fails it says so and can be tried again.
+- Changing the filter or search drops any selected role that is no longer showing, so a hidden role can't be deleted by accident.
+- If some can't be deleted, the page says how many were, and the rest stay selected to try again.
+
+### 3.7 Add a role manually
+- Create form with company, position, initial status, applied date, job posting link, and job ID. The link and job ID are marked optional.
+- The applied date field is only shown for a status other than Saved, and leaving it blank uses the current time.
 - Checks for an existing identical posting first and opens that record (with a notice) instead of creating a duplicate. The same web address counts as the same posting unless both have different job IDs.
 - If something is wrong, each field shows its own error and everything typed is kept.
 - The applied date cannot be in the future, and a saved role cannot have one.
 - Writes an initial timeline event, and rolls back the application if that event fails.
 
-### 3.7 Graceful degradation
-- A banner appears when the database migration for decisions, actions, and files is not applied yet. Existing roles still work.
+### 3.8 Graceful degradation
+- A banner appears when the database migration for actions and files is not applied yet. Existing roles still work.
 
-### 3.8 Dates and long lists
+### 3.9 Dates and long lists
 - Dates and times show in the viewer's own time zone, wherever the server runs. Dates typed into a form are read in that zone too.
 - Lists load in full however long they are, with no row limit.
 
-### 3.9 Sidebar navigation
-- Applications and Actions links with an active state, and sign-out at every screen size.
-- Live count badge for actions needing attention, refreshed every 30 seconds and when the tab becomes visible. Actions on passed saved roles are excluded.
+### 3.10 Sidebar navigation
+- Roles and Actions links with an active state, and sign-out at every screen size.
+- A **Processing issues** link appears while any save has failed, and while that page is open.
+- Live count badges for actions needing attention and for failed saves. They refresh every 30 seconds, when the tab becomes visible, and right after an action is added, edited, completed, or deleted, or a save is retried.
 
 ---
 
-## 4. Application Detail
+## 4. Role Detail
 
 Location: `apps/web/src/app/dashboard/applications/[id]`.
 
+The main column runs in the order people use it: next actions, timeline, then the details form. The side column holds the job description, files, record, duplicate merge, and delete.
+
 ### 4.1 Header
-- Company, position, and current status badge.
+- Company and position, with the status and **View posting** beside them.
 - Notice when the user was redirected here because the posting already existed.
 
-### 4.2 Application details
-- Edit company, position, URL, job ID, and applied date.
+### 4.2 Role details
+- Edit company, position, job posting link, job ID, and applied date.
 - Every edit is recorded as a timeline event.
 
 ### 4.3 Timeline
-- Chronological history of every event: type, evidence text, time, source (extension, manual, system), and any new status.
-- Event types: `JD_SAVED`, `MARKED_AS_APPLIED`, `APPLICATION_WITHDRAWN`, `GENERAL_UPDATE`, `MANUAL_CORRECTION`.
+- Chronological history of every event: a heading, evidence text, time, source (extension, manual, system), and any new status.
+- Headings use plain words: Job description saved, Marked as applied, Withdrawn, Status changed, and Update. They map from the event types `JD_SAVED`, `MARKED_AS_APPLIED`, `APPLICATION_WITHDRAWN`, `MANUAL_CORRECTION`, and `GENERAL_UPDATE`.
+- Every role starts with an entry: "Application created manually" for a role added by hand, and "Saved from the browser extension" for one saved from a job page. Saving the same posting again does not add a second one.
 
 ### 4.4 Next actions
-- Per-role list of actions plus an "Add an action" form (see section 5).
+- Per-role list of actions (see section 5). **Add action** opens the form in place, and saving or cancelling closes it.
 
-### 4.5 Worth pursuing? (triage panel)
-- Decision: Not reviewed, Pursue, Maybe, or Pass, with an optional reason up to 500 characters.
-- Only available while the role is `SAVED`.
-- Each change is logged on the timeline.
-
-### 4.6 Status
-- Manual status change across the selectable statuses.
+### 4.5 Status
+- The status in the header is a dropdown in the same colours as the roles table. Choosing another status saves it at once.
+- If the change can't be saved, the dropdown goes back to the stored status and a message says why.
 - No-op when the status is already current, and the change is logged on the timeline.
 - Going back to Saved clears the applied date, and the timeline records what it was.
 
-### 4.7 Job description document
+### 4.6 Job description document
 - Shows capture state and a **View PDF** link (signed URL) once conversion completes.
+- When a PDF cannot be made, the panel says why in plain words, for example that the saved page had no readable text.
 - **Retry conversion** re-queues a failed capture while the temporary capture still exists. If it has expired, the user is told to capture the page again.
 
-### 4.8 Application files
-- Optional upload of the resume or other submitted documents.
+### 4.7 Your files
+- Optional upload of the resume or other submitted documents. **Add file** opens the file picker, and the chosen file uploads straight away.
 - PDF and DOCX only, 6 MB limit. The browser also checks the contents, so a file that was only renamed is refused.
-- Stored in a private bucket, listed with a **Remove** button.
+- Stored in a private bucket, listed with a **Remove** button that asks for confirmation in the app's standard dialog.
 - Never enters the PDF conversion queue.
 
-### 4.9 Duplicate application merge
-- Pick another entry that represents the exact same posting and consolidate it.
-- Moves the PDFs, files, actions, and timeline into the kept record, and preserves the saved-role decision. If both have a decision, the kept record's decision and reason stay.
+### 4.8 Duplicate role merge
+- Folded under **Saved this role twice?** until opened.
+- Pick another entry that represents the exact same posting and consolidate it. The app's standard dialog names the chosen entry and asks for confirmation.
+- Moves the PDFs, files, actions, and timeline into the kept record.
 
-### 4.10 Record facts
-- Applied, created, and updated timestamps, plus job ID.
-- **Open original page** link.
+### 4.9 Record facts
+- Applied, added, and updated timestamps, plus the job ID when there is one.
 
-### 4.11 Danger zone
-- Permanently deletes the application along with its timeline, temporary capture, stored PDF, and attachments.
+### 4.10 Delete this role
+- Permanently deletes the role along with its timeline, temporary capture, stored PDF, and attachments, after asking for confirmation in the same dialog as the Roles page.
 
 ---
 
@@ -199,37 +221,35 @@ Location: `apps/web/src/app/dashboard/actions`, `action-ui.tsx`, `action-item-ac
 - Validation rejects a reminder later than the due time.
 
 ### 5.2 In-app reminders
-- Options: at due date only, at due time, 1 day before, 3 days before, or a custom time.
+- Options: on the due date only, at due time, 1 day before, 3 days before, or a custom time.
 - Reminders show while the dashboard is open or on the next visit. No email or browser notifications.
 
 ### 5.3 Grouped action list
-- Groups: Overdue, Reminders, Due today, Upcoming, Paused for passed roles, Completed.
+- Groups: Overdue, Reminders, Due today, Upcoming, Completed.
 - Re-evaluated every 30 seconds.
-- Each row links back to its role.
+- Completed actions are folded under their heading until opened.
+- Each row links back to its role, except on that role's own page.
 
 ### 5.4 Row controls
-- Complete or reopen with a checkbox, plus Edit and Delete (with a confirm prompt).
+- Complete or reopen with a checkbox, plus Edit and Delete. Delete asks for confirmation in the app's standard dialog, naming the action and its role.
 
-### 5.5 Pass pauses actions
-- Actions on a saved role marked Pass move to "Paused" and are excluded from attention counts until the decision changes.
-
-### 5.6 All actions page
-- Full list across every role, with a link back to Applications.
+### 5.5 All actions page
+- Full list across every role. The line under the title counts the open actions.
 
 ---
 
 ## 6. Processing Issues (Operations)
 
-Location: `apps/web/src/app/dashboard/operations`. Reached by URL, and not linked in the sidebar.
+Location: `apps/web/src/app/dashboard/operations`. Linked from the sidebar while a save has failed, and always reachable at `/dashboard/operations`.
 
 ### 6.1 Failed job list
-- Lists capture jobs that exhausted automatic retries, with company, role, attempt count, last error, and failure time.
+- Lists failed captures that need attention, including uploads that did not finish and conversions that exhausted automatic retries, with company, role, processing attempt count, a plain explanation of what went wrong, and failure time. The converter's raw error, which can name server paths, is never shown.
 - Count badge in the header.
 - Empty state when nothing has failed.
 
 ### 6.2 Retry
 - **Retry** re-queues the capture for a failed job.
-- Validates the job ID and kind, and reports when the temporary capture is gone.
+- Validates the capture kind and document replay ID, and reports when the temporary capture is gone.
 
 ---
 
@@ -239,22 +259,26 @@ Location: `apps/worker`.
 
 ### 7.1 Capture processing
 - Claims queued capture jobs, then converts MHTML to PDF.
-- Conversion runs in an isolated, network-restricted container (built with `pnpm mhtml:image:build`).
-- Uploads the PDF to private storage, then records its size and SHA-256 checksum.
+- Conversion runs in an isolated, network-restricted container. The converter and its image live in `apps/converter` and are built with `pnpm mhtml:image:build`.
+- Uploads each attempt's PDF to its own private storage key. Only the current attempt can publish its PDF and record its size and SHA-256 checksum.
 - Validates each job payload with Zod.
 
 ### 7.2 Retries
-- Failed jobs are retried automatically with attempt counting.
-- Jobs that exhaust retries surface on the Processing Issues page.
+- Failures that may pass on their own, such as a slow conversion or a converter that is not running, are retried up to three attempts, after 5 seconds and then 30 seconds.
+- Failures that retrying cannot fix, such as a page with no readable text or an invalid job, fail after one attempt.
+- The owner sees a plain message. The full error, including the converter command, goes only to the worker's log.
+- Jobs that fail for good surface on the role's page and the Processing Issues page.
 
 ### 7.3 Cleanup and retention
 - Deletes the temporary capture after a successful conversion, and retries any cleanup that failed.
+- Cleans up PDFs left behind by abandoned attempts.
 - Marks a save as failed if its upload has not finished after 30 minutes, so it can be retried and is cleaned up like any other failure.
 - Failed payloads expire after 7 days by default (`FAILED_PAYLOAD_RETENTION_DAYS`).
 - Failed job metadata is purged after 90 days by default (`FAILED_JOB_RETENTION_DAYS`, minimum 30).
 
 ### 7.4 Verification script
-- `scripts/verify-authorization.ts` checks two-user isolation across the database, storage, and replay paths.
+- `apps/worker/scripts/verify-authorization.ts` checks two-user isolation across the database, storage, and replay paths.
+- `apps/worker/scripts/seed-demo.ts` (`pnpm seed:demo`) creates a demo account with sample roles, timeline entries, and actions. It only runs against local Supabase.
 
 ---
 
@@ -263,7 +287,7 @@ Location: `apps/worker`.
 Location: `supabase/`.
 
 ### 8.1 Core tables
-- `applications` (with status, triage decision and reason, fingerprint, and job ID), `application_events`, `documents`, `capture_jobs`, `application_actions`, `application_attachments`.
+- `applications` (with status, fingerprint, and job ID; the `triage_decision` and `triage_reason` columns remain from an earlier feature and nothing in the app sets them), `application_events`, `documents`, `capture_jobs`, `application_actions`, `application_attachments`.
 
 ### 8.2 Storage buckets
 - `temporary-captures` for MHTML in transit.
@@ -272,16 +296,18 @@ Location: `supabase/`.
 - All private, with per-user folder policies.
 
 ### 8.3 Row-level security
-- Every table is scoped to its owning user, including inserts that check ownership of the parent application.
+- User-facing tables are scoped to their owners, including parent ownership checks when adding related records. The capture storage deletion queue is available only to the service role.
+- Signed-in clients have explicit grants for the operations they use. New public tables created by migrations require explicit client grants.
 - The service role is used only by the server and worker, and never ships in the extension or browser bundle.
 
 ### 8.4 Duplicate detection
 - `application_identity_key` gives each posting a key, in the order described in section 1.2, and a unique index allows one application per key for each user.
 - `find_existing_application` runs before a manual create, and `create_capture_session` before a capture. Both check that key, then the same URL with no conflicting job ID.
+- URL fallback matching preserves case in paths, retained query parameters, and hash routes, along with the order of repeated query values.
 - `merge_duplicate_applications` consolidates records.
 
 ### 8.5 Migrations
-- The history runs from foundation, through the capture pipeline, reliability work, deduplication, and the removal of the email pipeline, up to `actions_and_triage`.
+- Migrations cover the foundation, capture pipeline, email pipeline removal, actions and triage, worker recovery, posting identity, client table grants, plain capture failure messages, and timeline entries for extension saves.
 
 ---
 
@@ -292,7 +318,7 @@ Location: `supabase/`.
 - `NEEDS_REVIEW` is a legacy enum value that is excluded from user choices.
 
 ### 9.2 `@rolesave/validation`
-- Zod schemas for auth credentials, application creation, triage, actions (with the reminder-before-due rule), and capture metadata and queue jobs.
+- Zod schemas for auth credentials, application creation, actions, and capture metadata and queue jobs. Action reminders can be set for any time at or before the due time, regardless of time-zone offset.
 
 ### 9.3 `@rolesave/config`
 - Shared TypeScript base configuration.
@@ -312,8 +338,11 @@ Location: `supabase/`.
 | Database | `pnpm supabase:start`, `pnpm supabase:reset` | Local Supabase lifecycle |
 | Database | `pnpm test:fingerprint` | Fingerprint SQL tests |
 | Converter | `pnpm mhtml:image:build` | Build the isolated converter image |
+| Converter | `pnpm converter:verify`, `pnpm converter:verify:image` | Check the converter with local Chrome, or inside its container |
+| End to end | `pnpm test:e2e` | Browser tests against the running stack |
+| Demo data | `pnpm seed:demo` | Create a local demo account with sample roles |
 
-CI runs from `.github/workflows/ci.yml`. The `spikes/` folder holds isolated technical experiments.
+CI runs from `.github/workflows/ci.yml`: quality checks, database tests, and end-to-end tests against a production build. The `spikes/` folder holds earlier technical experiments.
 
 ---
 

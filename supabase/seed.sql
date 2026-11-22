@@ -1,3 +1,4 @@
--- Product fixtures will be inserted through authenticated API flows once the
--- local Auth integration is implemented. Keep this file so `db reset` remains
--- deterministic without creating users that bypass Supabase Auth.
+-- Demo data is created through Supabase Auth and the app's row-level security
+-- rather than inserted here, so `db reset` never creates users that bypass
+-- Auth. After a reset, run `pnpm seed:demo` for a demo account with sample
+-- roles, timeline entries, and actions.

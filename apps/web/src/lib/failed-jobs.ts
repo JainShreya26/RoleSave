@@ -1,18 +1,8 @@
 import "server-only";
 
 import { requireViewer } from "@/lib/auth";
+import { buildFailedJobItems, type FailedJobItem } from "@/lib/failed-job-features";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-
-export interface FailedJobItem {
-  attemptCount: number;
-  company: string | null;
-  failedAt: string | null;
-  id: string;
-  kind: "CAPTURE";
-  lastError: string;
-  position: string | null;
-  replayId: string;
-}
 
 export async function listFailedJobs(): Promise<FailedJobItem[]> {
   const { supabase, viewer } = await requireViewer();
@@ -36,21 +26,5 @@ export async function listFailedJobs(): Promise<FailedJobItem[]> {
         .order("id")
         .range(from, to));
   if (applicationsResult.error) throw applicationsResult.error;
-  const applications = new Map(applicationsResult.data.map((application) => [application.id, application]));
-
-  return captureResult.data
-    .map((job): FailedJobItem => {
-      const application = applications.get(job.application_id);
-      return {
-        attemptCount: job.attempt_count,
-        company: application?.company ?? null,
-        failedAt: job.failed_at,
-        id: job.id,
-        kind: "CAPTURE",
-        lastError: job.last_error ?? "Capture processing failed.",
-        position: application?.position ?? null,
-        replayId: job.document_id,
-      };
-    })
-    .sort((left, right) => (right.failedAt ?? "").localeCompare(left.failedAt ?? ""));
+  return buildFailedJobItems(captureResult.data, applicationsResult.data);
 }

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { convertMhtmlToPdf } from "./convert.mjs";
+import { convertMhtmlToPdf } from "@rolesave/converter/convert";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 4318;

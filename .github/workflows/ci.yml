@@ -20,7 +20,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod
@@ -33,7 +33,11 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
           NEXT_PUBLIC_SITE_URL: https://ci-placeholder.example.com
-      - run: docker build -f spikes/mhtml-capture/Dockerfile -t rolesave-mhtml-converter:ci .
+      - run: docker build -f apps/converter/Dockerfile -t rolesave-mhtml-converter:ci .
+      - name: Check the converter image converts a page in its sandbox
+        env:
+          MHTML_CONVERTER_IMAGE: rolesave-mhtml-converter:ci
+        run: pnpm converter:verify:image
 
   database-authorization:
     runs-on: ubuntu-latest
@@ -42,11 +46,11 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm supabase:start
-      - run: pnpm exec supabase test db supabase/tests/database/authorization.test.sql supabase/tests/database/capture-flow.test.sql supabase/tests/database/merge-duplicates.test.sql
+      - run: pnpm exec supabase test db supabase/tests/database
       - name: Run duplicate-matching SQL tests
         env:
           # The tests create and drop their own database on this server.
@@ -66,6 +70,60 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY="$ANON_KEY" \
           SUPABASE_SECRET_KEY="$SERVICE_ROLE_KEY" \
           pnpm test:authorization
+      - if: always()
+        continue-on-error: true
+        run: pnpm supabase:stop
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm mhtml:image:build
+      - run: pnpm supabase:start
+      - name: Point the app at local Supabase
+        shell: bash
+        run: |
+          pnpm exec supabase status -o env > .supabase-ci.env
+          set -a
+          source .supabase-ci.env
+          set +a
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY"
+            echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3100"
+            echo "SUPABASE_SECRET_KEY=$SERVICE_ROLE_KEY"
+            echo "MHTML_CONVERTER_RUNTIME=container"
+          } > apps/web/.env.local
+      # A production build, so the tests also cover its security headers.
+      - run: pnpm --filter @rolesave/web build
+      - name: Start the web app and worker
+        shell: bash
+        run: |
+          (cd apps/web && nohup pnpm exec next start -p 3100 -H 127.0.0.1 > ../../web.log 2>&1 &)
+          nohup pnpm --filter @rolesave/worker start > worker.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl --fail --silent --output /dev/null http://127.0.0.1:3100/auth && exit 0
+            sleep 1
+          done
+          echo "The web app did not start." && cat web.log && exit 1
+      # Uses the Google Chrome already installed on GitHub's runners.
+      - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: end-to-end-results
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            web.log
+            worker.log
+          retention-days: 7
       - if: always()
         continue-on-error: true
         run: pnpm supabase:stop

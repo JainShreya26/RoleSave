@@ -7,7 +7,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 export type ActionItem = Pick<
   Database["public"]["Tables"]["application_actions"]["Row"],
   "id" | "application_id" | "title" | "due_at" | "remind_at" | "completed_at"
-> & { company: string; position: string; roleStatus: string; triageDecision: string | null };
+> & { company: string; position: string };
 
 export async function listActionItems(applicationId?: string): Promise<ActionItem[]> {
   const { supabase, viewer } = await requireViewer();
@@ -27,7 +27,7 @@ export async function listActionItems(applicationId?: string): Promise<ActionIte
   const { data: applications, error: applicationError } = await fetchAllRows((from, to) => {
     let query = supabase
       .from("applications")
-      .select("id,company,position,status,triage_decision")
+      .select("id,company,position")
       .eq("user_id", viewer.id);
     if (applicationId) query = query.eq("id", applicationId);
     return query.order("id").range(from, to);
@@ -42,8 +42,6 @@ export async function listActionItems(applicationId?: string): Promise<ActionIte
       ...item,
       company: application.company,
       position: application.position,
-      roleStatus: application.status,
-      triageDecision: application.triage_decision,
     }] : [];
   });
 }

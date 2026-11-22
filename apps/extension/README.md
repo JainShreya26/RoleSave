@@ -6,13 +6,13 @@ Saving runs in a background service worker, so it continues if the popup closes.
 
 After saving, the popup only confirms that the job description is safe and tells the user to continue on the employer site. RoleSave remembers in-progress applications locally for seven days, and you can save other jobs in the meantime. When the extension is opened again after submission, **Mark as applied** changes the application from `SAVED` to `APPLIED`, records the application time, and appends an extension-sourced timeline event. Repeated clicks are idempotent and applications already in a later stage are never downgraded.
 
-For local work, use the development build. It reads the public Supabase URL and publishable key from `apps/web/.env.local`, and `apps/web/.env.development.local` overrides them if it exists. The service-role key is never included in the extension bundle.
+For local work, use the development build so saved roles open in the local dashboard at `http://127.0.0.1:3100`. It reads the public Supabase URL and publishable key from `apps/web/.env.local`, and `apps/web/.env.development.local` overrides them if it exists. The service-role key is never included in the extension bundle. If the dashboard runs on a different port, set `NEXT_PUBLIC_SITE_URL` in the build command.
 
 ```sh
 pnpm --filter @rolesave/extension build:dev
 ```
 
-For a release build without localhost permissions, set the production Supabase values and `NEXT_PUBLIC_SITE_URL` in the environment, then run `pnpm --filter @rolesave/extension build`.
+For a release build, set the production Supabase values and `NEXT_PUBLIC_SITE_URL` to the hosted HTTPS dashboard that uses that same project. Then run `pnpm --filter @rolesave/extension build`.
 
 Load `apps/extension/dist` as an unpacked extension in `chrome://extensions`, or click Reload if it is already loaded.
 

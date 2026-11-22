@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in RoleSave does not work as described.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report security problems privately instead, as described in SECURITY.md.
+        Leave out personal details, real job pages, and keys.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did it happen?
+      options:
+        - Web dashboard
+        - Chrome extension
+        - Saving a job or making the PDF
+        - Local setup or tests
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and version, operating system, and the commit you are running.
+      placeholder: Chrome 148, macOS 16, commit abc1234
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Worker or browser console output, with personal details removed.
+      render: text

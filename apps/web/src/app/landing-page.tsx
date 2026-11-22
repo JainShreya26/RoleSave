@@ -1,14 +1,14 @@
 import { AuthForm } from "./auth/auth-form";
+import { BrandLogo } from "./brand-logo";
 import { HeadlineWord, ListingToy, StepsDemo } from "./landing-interactive";
 
 // Set this to the Chrome Web Store listing once the extension is published.
 const chromeExtensionUrl: string | null = null;
 
-function Brand() {
+function Brand({ preload = false }: { preload?: boolean }) {
   return (
     <span className="landing-brand">
-      <span className="logo-mark" aria-hidden="true"><span /><span /><span /></span>
-      RoleSave
+      <BrandLogo className="landing-brand-logo" preload={preload} sizes="(max-width: 430px) 116px, 158px" />
     </span>
   );
 }
@@ -18,7 +18,7 @@ export function LandingPage() {
     <div className="landing">
       <div className="landing-top">
         <header className="landing-nav">
-          <Brand />
+          <Brand preload />
           <nav aria-label="Page sections">
             <a href="#how-it-works">How it works</a>
             <a href="#extension">Extension</a>

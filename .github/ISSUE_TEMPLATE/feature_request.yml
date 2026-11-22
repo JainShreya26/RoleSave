@@ -1,0 +1,26 @@
+name: Idea or improvement
+description: Suggest a change to RoleSave.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RoleSave focuses on tracking applications. It does not submit applications,
+        score resumes, write cover letters, or recommend jobs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation, not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?

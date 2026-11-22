@@ -28,7 +28,6 @@ arrive.
 
 - Saves job descriptions before listings disappear.
 - Records applications from the Chrome extension or manual entry.
-- Lets you mark each saved role as Pursue, Maybe, or Pass.
 - Tracks dated next actions and shows due or overdue reminders inside the dashboard.
 - Shows application status and evidence in a private web dashboard.
 - Optionally stores PDFs or DOCX files you upload for a role.
@@ -49,17 +48,16 @@ write cover letters, or recommend jobs.
 3. **Apply as usual.** Submit on the employer's site, then open the extension again and
    click **Mark as applied**. The time is recorded for you.
 4. **Track what happens next.** Update the status as replies come in, add next actions
-   with reminders, and see each role's decision and full history in the dashboard.
+   with reminders, and see each role's full history in the dashboard.
 
 Saving a posting you already track reuses its existing record. If a duplicate slips
 through, you can merge it from the application page.
 
-A capture that fails automatic processing can be retried from its application page or
-from the Processing issues page at `/dashboard/operations`.
+If a page cannot be turned into a PDF, the role's page says why in plain words and
+offers a retry. Failed saves also appear under **Processing issues** in the sidebar.
 
 Reminders are in-app only. They appear while the dashboard is open or the next
 time you visit; RoleSave does not send email or browser notifications.
-Actions for roles marked Pass are paused until you change that decision.
 
 ## Chrome extension
 
@@ -77,17 +75,18 @@ unpacked, as described in [Getting started](#getting-started).
 
 ```text
 apps/
+  converter/   Chromium converter that turns saved pages into PDFs, and its Docker image
   extension/   Chrome extension for saving roles and capturing job pages
-  web/         Next.js landing page, dashboard, and authentication
-  worker/      Background worker that converts captured pages into PDFs
+  web/         Next.js landing page, dashboard, authentication, and end-to-end tests
+  worker/      Background worker that runs the converter, plus test and demo scripts
 packages/
   config/      Shared configuration
   types/       Shared TypeScript types
   validation/  Shared input validation
-supabase/      Local configuration, migrations, email templates, tests, and seed data
-spikes/        Technical experiments, including the PDF converter's Docker image
+supabase/      Local configuration, migrations, email templates, and database tests
+spikes/        Earlier technical experiments
 scripts/       SQL test runner
-docs/          Local development guide, reference documentation, and README media
+docs/          Local development guide, feature map, and README media
 ```
 
 ## Technology
@@ -138,6 +137,9 @@ pnpm dev
 
 Then open [http://127.0.0.1:3100](http://127.0.0.1:3100). The worker turns saved job pages into PDFs, so saves wait in a queue until it is running.
 
+For sample data, run `pnpm seed:demo` and sign in as `demo@rolesave.test` with the
+password `rolesave-demo`. It only works against local Supabase.
+
 Build the extension to save real job pages:
 
 ```sh
@@ -161,7 +163,10 @@ For detailed Supabase and local setup instructions, see
 | `pnpm dev:worker` | Start only the background worker |
 | `pnpm test` | Run the test suite |
 | `pnpm test:authorization` | Run two-user database, storage, and replay isolation tests |
+| `pnpm test:e2e` | Run browser tests against the running local stack |
+| `pnpm seed:demo` | Create a local demo account with sample roles |
 | `pnpm mhtml:image:build` | Build the isolated MHTML converter image |
+| `pnpm converter:verify:image` | Check the converter image turns a page into a PDF inside its sandbox |
 | `pnpm typecheck` | Type-check all workspaces |
 | `pnpm lint` | Run configured linters |
 | `pnpm build` | Build all buildable workspaces |
@@ -171,8 +176,10 @@ For detailed Supabase and local setup instructions, see
 ## Documentation
 
 - [Local development guide](docs/LOCAL_DEVELOPMENT.md)
+- [Feature map](docs/FEATURES.md)
 - [Extension README](apps/extension/README.md)
 - [Web app README](apps/web/README.md)
+- [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md), and [changelog](CHANGELOG.md)
 
 ## Status
 

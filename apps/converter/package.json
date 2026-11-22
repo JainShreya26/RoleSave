@@ -1,0 +1,17 @@
+{
+  "name": "@rolesave/converter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./convert": "./src/convert.mjs"
+  },
+  "scripts": {
+    "convert": "node src/convert.mjs",
+    "verify": "node scripts/verify.mjs",
+    "verify:image": "node scripts/verify-image.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}

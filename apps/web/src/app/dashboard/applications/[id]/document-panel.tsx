@@ -4,6 +4,7 @@ import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { retryCaptureAction, type ApplicationActionState } from "../../actions";
 import { LocalDate } from "../../local-date";
+import { capturesChangedEvent } from "@/lib/failed-job-features";
 import { titleCase } from "@/lib/format";
 import type { ApplicationDocumentItem } from "@/lib/applications";
 
@@ -18,7 +19,9 @@ function stateMessage(latest: ApplicationDocumentItem, hasPdf: boolean) {
     case "PENDING":
       return "The capture is waiting for the worker. This page updates automatically.";
     case "FAILED":
-      return hasPdf ? "The latest capture could not be converted, but an earlier PDF is still available." : "The PDF could not be created.";
+      return hasPdf
+        ? "The latest capture could not be converted, but an earlier PDF is still available."
+        : latest.failure_reason ?? "The PDF could not be created.";
   }
 }
 
@@ -31,6 +34,9 @@ export function DocumentPanel({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(retryCaptureAction, initialState);
+  useEffect(() => {
+    if (state.success) window.dispatchEvent(new Event(capturesChangedEvent));
+  }, [state]);
   const latest = documents[0];
   const pdfs = documents.filter((document) => document.pdf_available);
   const processing = documents.some((document) => document.capture_status === "PENDING" || document.capture_status === "PROCESSING");

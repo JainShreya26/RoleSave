@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
+import roleSaveLogo from "./assets/rolesave-logo.png";
 import "./App.css";
 import { markApplicationApplied, readPageMetadata, type PageMetadata } from "./capture";
 import {
@@ -197,8 +198,10 @@ export default function App() {
   return (
     <main className="popup">
       <header className="brand-row">
-        <span className="logo" aria-hidden="true"><i /><i /><i /></span>
-        <div><strong>RoleSave</strong><small>Application Tracker</small></div>
+        <div className="brand-lockup">
+          <img className="brand-logo" src={roleSaveLogo} alt="RoleSave" width={420} height={98} />
+          <small>Application Tracker</small>
+        </div>
         {session ? <button className="text-button" onClick={() => void signOut()}>Sign out</button> : null}
       </header>
 

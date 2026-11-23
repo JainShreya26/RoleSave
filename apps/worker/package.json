@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@rolesave/validation": "workspace:*",
-    "@supabase/supabase-js": "^2.112.3"
+    "@supabase/supabase-js": "^2.119.2"
   },
   "devDependencies": {
     "@rolesave/config": "workspace:*",

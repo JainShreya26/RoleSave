@@ -41,6 +41,9 @@ Notable changes to RoleSave. RoleSave has no releases yet, so everything is unde
   security policy, so self-hosted Supabase on its own domain works.
 - Running pnpm commands inside `apps/web` no longer fails on a leftover
   workspace file.
+- Type checking no longer depends on `next-env.d.ts` left behind by
+  `next dev`. It runs `next typegen` first, so it also passes on a fresh
+  clone and in CI.
 
 ### Removed
 

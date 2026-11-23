@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test src/lib/action-timing.test.ts src/lib/application-export.test.ts src/lib/attachment-files.test.ts src/lib/auth-errors.test.ts src/lib/delete-confirmation.test.ts src/lib/failed-job-features.test.ts src/lib/format.test.ts src/lib/role-list.test.ts src/lib/supabase/fetch-all.test.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test"
   },
   "dependencies": {
